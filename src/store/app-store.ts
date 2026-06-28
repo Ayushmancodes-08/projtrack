@@ -2,9 +2,22 @@ import { create } from "zustand"
 import type { Project, Task, ProjectType, StatusConfig, Priority, HealthStatus } from "@/lib/types"
 import { createClient } from "@/lib/supabase/client"
 
+export type AppNotification = {
+  id: string
+  title: string
+  body: string
+  type: "review_request" | "info"
+  task_id: string
+  project_id: string
+  user_name: string
+  timestamp: string
+  resolved: boolean
+}
+
 type AppState = {
   projects: Project[]
   tasks: Record<string, Task[]> // project_id -> Task[]
+  notifications: AppNotification[]
   sidebarCollapsed: boolean
   isLoaded: boolean
   
@@ -16,6 +29,8 @@ type AppState = {
   addTask: (projectId: string, title: string, priority: Priority, assignee: string, dueDate: string, blocked: boolean, status?: string) => Promise<Task>
   updateTaskStatus: (projectId: string, taskId: string, newStatus: string) => Promise<void>
   syncWithSupabase: () => Promise<void>
+  addNotification: (title: string, body: string, type: "review_request" | "info", task_id: string, project_id: string, user_name: string) => Promise<void>
+  resolveNotification: (notificationId: string) => Promise<void>
 }
 
 // Helper to generate UUIDs in the browser
@@ -37,6 +52,7 @@ type SupabaseTaskRow = Record<string, unknown>
 export const useAppStore = create<AppState>((set, get) => ({
   projects: [],
   tasks: {},
+  notifications: [],
   sidebarCollapsed: false,
   isLoaded: false,
 
@@ -48,11 +64,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     // 1. Load from LocalStorage for instant load / best UX
     const localProjects = localStorage.getItem("projtrack_projects")
     const localTasks = localStorage.getItem("projtrack_tasks")
+    const localNotifications = localStorage.getItem("projtrack_notifications")
 
     const projects: Project[] = localProjects ? JSON.parse(localProjects) : []
     const tasks: Record<string, Task[]> = localTasks ? JSON.parse(localTasks) : {}
+    const notifications: AppNotification[] = localNotifications ? JSON.parse(localNotifications) : []
 
-    set({ projects, tasks, isLoaded: true })
+    set({ projects, tasks, notifications, isLoaded: true })
 
     // 2. Load from Supabase in the background to sync latest data
     try {
@@ -125,9 +143,31 @@ export const useAppStore = create<AppState>((set, get) => ({
             })
           })
 
-          set({ projects: syncedProjects, tasks: syncedTasks })
+          // Fetch notifications
+          const { data: dbNotifications, error: notifError } = await supabase
+            .from("notifications_queue")
+            .select("*")
+            .order("created_at", { ascending: false })
+
+          let syncedNotifications = notifications
+          if (!notifError && dbNotifications) {
+            syncedNotifications = dbNotifications.map((n: Record<string, any>) => ({
+              id: n.id,
+              title: n.title,
+              body: n.body,
+              type: n.data?.type || "info",
+              task_id: n.data?.task_id || "",
+              project_id: n.data?.project_id || "",
+              user_name: n.data?.user_name || "System",
+              timestamp: n.data?.timestamp || new Date(n.created_at).toLocaleString(),
+              resolved: n.read
+            }))
+          }
+
+          set({ projects: syncedProjects, tasks: syncedTasks, notifications: syncedNotifications })
           localStorage.setItem("projtrack_projects", JSON.stringify(syncedProjects))
           localStorage.setItem("projtrack_tasks", JSON.stringify(syncedTasks))
+          localStorage.setItem("projtrack_notifications", JSON.stringify(syncedNotifications))
         }
       }
     } catch (e) {
@@ -303,6 +343,58 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     } catch (e) {
       console.error("Full Supabase sync failed", e)
+    }
+  },
+
+  addNotification: async (title, body, type, task_id, project_id, user_name) => {
+    const newNotification: AppNotification = {
+      id: generateUUID(),
+      title,
+      body,
+      type,
+      task_id,
+      project_id,
+      user_name,
+      timestamp: new Date().toLocaleString(),
+      resolved: false
+    }
+
+    const updatedNotifications = [newNotification, ...get().notifications]
+    set({ notifications: updatedNotifications })
+    localStorage.setItem("projtrack_notifications", JSON.stringify(updatedNotifications))
+
+    try {
+      const supabase = createClient()
+      await supabase.from("notifications_queue").insert({
+        id: newNotification.id,
+        title: newNotification.title,
+        body: newNotification.body,
+        read: false,
+        data: {
+          type: newNotification.type,
+          task_id: newNotification.task_id,
+          project_id: newNotification.project_id,
+          user_name: newNotification.user_name,
+          timestamp: newNotification.timestamp
+        }
+      })
+    } catch (e) {
+      console.warn("Supabase notification save failed", e)
+    }
+  },
+
+  resolveNotification: async (notificationId) => {
+    const updatedNotifications = get().notifications.map((n) => 
+      n.id === notificationId ? { ...n, resolved: true } : n
+    )
+    set({ notifications: updatedNotifications })
+    localStorage.setItem("projtrack_notifications", JSON.stringify(updatedNotifications))
+
+    try {
+      const supabase = createClient()
+      await supabase.from("notifications_queue").update({ read: true }).eq("id", notificationId)
+    } catch (e) {
+      console.warn("Supabase notification resolve failed", e)
     }
   }
 }))

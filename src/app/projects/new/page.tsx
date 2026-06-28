@@ -195,6 +195,7 @@ export default function NewProjectPage() {
                       value={deadline}
                       onChange={(e) => setDeadline(e.target.value)}
                       disabled={isCreating}
+                      min={new Date().toISOString().split("T")[0]}
                       className="focus-visible:ring-gold"
                     />
                   </div>

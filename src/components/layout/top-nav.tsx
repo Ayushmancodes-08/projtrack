@@ -5,6 +5,7 @@ import { Bell, Search, ChevronDown } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +17,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useClerk, useUser, useOrganization } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
+import { useAppStore } from "@/store/app-store"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Separator } from "@/components/ui/separator"
+import { Check, Info, AlertCircle, Trash2 } from "lucide-react"
+import { toast } from "sonner"
+import type { AppNotification } from "@/store/app-store"
 
 // BUG-014 FIXED: Removed unused `useAppStore` import
 
@@ -24,6 +32,24 @@ export function TopNav() {
   const { organization: clerkOrg, membership } = useOrganization()
   const { signOut, openUserProfile } = useClerk()
   const router = useRouter()
+  
+  const { notifications, resolveNotification, updateTaskStatus, projects } = useAppStore()
+
+  const isAdmin = !clerkOrg || membership?.role === "org:admin"
+  const unreadNotifications = notifications.filter((n) => !n.resolved)
+  const unreadCount = unreadNotifications.length
+
+  const handleApprove = async (n: AppNotification) => {
+    try {
+      const project = projects.find((p) => p.id === n.project_id)
+      const doneStatus = project?.status_config.find((s) => s.category === "done")?.id || "done"
+      await updateTaskStatus(n.project_id, n.task_id, doneStatus)
+      await resolveNotification(n.id)
+      toast.success("Task approved and completed successfully!")
+    } catch {
+      toast.error("Failed to approve task")
+    }
+  }
 
   // BUG-022 FIXED: Add search state (navigates to projects with query)
   const [searchQuery, setSearchQuery] = useState("")
@@ -69,10 +95,85 @@ export function TopNav() {
         />
       </div>
 
-      {/* BUG-020 FIXED: Notification badge hidden — no real notification system exists yet */}
-      <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-lg text-muted-foreground transition-colors hover:bg-navy-100 hover:text-navy">
-        <Bell className="h-4 w-4" />
-      </Button>
+      <Popover>
+        <PopoverTrigger className="relative h-9 w-9 rounded-lg text-muted-foreground transition-colors hover:bg-navy-100 hover:text-navy cursor-pointer flex items-center justify-center border-0 bg-transparent">
+          <Bell className="h-4 w-4" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-white animate-pulse">
+              {unreadCount}
+            </span>
+          )}
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-80 rounded-xl border border-gray-100 p-0 shadow-elevated">
+          <div className="flex items-center justify-between p-3.5 pb-2.5">
+            <h3 className="font-semibold text-xs text-navy">Notifications</h3>
+            {unreadCount > 0 && (
+              <span className="text-[10px] font-medium text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
+                {unreadCount} New
+              </span>
+            )}
+          </div>
+          <Separator />
+          <ScrollArea className="h-72">
+            {notifications.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center p-8 text-center text-muted-foreground">
+                <Info className="h-8 w-8 text-muted-foreground/40 mb-2" />
+                <p className="text-xs">No notifications yet</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {notifications.map((n) => (
+                  <div key={n.id} className={cn("p-3.5 transition-colors hover:bg-slate-50/50", n.resolved && "opacity-60")}>
+                    <div className="flex gap-2.5">
+                      <div className="mt-0.5">
+                        {n.type === "review_request" ? (
+                          <AlertCircle className="h-4 w-4 text-amber-500" />
+                        ) : (
+                          <Info className="h-4 w-4 text-blue-500" />
+                        )}
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <p className="text-xs font-semibold text-navy leading-tight">{n.title}</p>
+                        <p className="text-[11px] text-muted-foreground leading-snug">{n.body}</p>
+                        <p className="text-[9px] text-muted-foreground/60">{n.timestamp}</p>
+                        
+                        {!n.resolved && n.type === "review_request" && isAdmin && (
+                          <div className="flex gap-2 pt-2">
+                            <Button
+                              size="sm"
+                              onClick={() => handleApprove(n)}
+                              className="h-7 rounded-md bg-green-600 px-2.5 text-[10px] text-white hover:bg-green-700 font-medium cursor-pointer"
+                            >
+                              Confirm & Complete
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => resolveNotification(n.id)}
+                              className="h-7 rounded-md border-gray-200 px-2.5 text-[10px] hover:bg-gray-50 font-medium cursor-pointer"
+                            >
+                              Dismiss
+                            </Button>
+                          </div>
+                        )}
+
+                        {!n.resolved && (!isAdmin || n.type !== "review_request") && (
+                          <button
+                            onClick={() => resolveNotification(n.id)}
+                            className="text-[10px] font-medium text-navy/60 hover:text-navy pt-1.5 flex items-center gap-0.5 cursor-pointer"
+                          >
+                            <Check className="h-3 w-3" /> Mark as read
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </PopoverContent>
+      </Popover>
 
       <DropdownMenu>
         <DropdownMenuTrigger className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors data-open:bg-navy-100 cursor-pointer">

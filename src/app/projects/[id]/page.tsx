@@ -27,7 +27,7 @@ import { GanttChart } from "@/components/gantt/gantt-chart"
 import { SpreadsheetView } from "@/components/spreadsheet/spreadsheet-view"
 import Link from "next/link"
 import { useAppStore } from "@/store/app-store"
-import { useOrganization } from "@clerk/nextjs"
+import { useUser, useOrganization } from "@clerk/nextjs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { toast } from "sonner"
 
@@ -40,8 +40,12 @@ export default function ProjectDetailPage() {
   const router = useRouter()
   const projectId = params.id as string
 
-  const { projects, tasks: storeTasks, initializeStore, addTask, updateTaskStatus, isLoaded } = useAppStore()
-  const { memberships } = useOrganization()
+  const { projects, tasks: storeTasks, initializeStore, addTask, updateTaskStatus, isLoaded, addNotification } = useAppStore()
+  const { user: clerkUser } = useUser()
+  const { organization: clerkOrg, membership, memberships } = useOrganization()
+
+  const isAdmin = !clerkOrg || membership?.role === "org:admin"
+  const userName = clerkUser?.fullName || clerkUser?.primaryEmailAddress?.emailAddress || "Team Member"
 
   const [view, setView] = useState<"kanban" | "gantt" | "spreadsheet">("kanban")
   
@@ -287,6 +291,9 @@ export default function ProjectDetailPage() {
               // Optionally handle detail drawer
             }}
             onAddTask={handleAddTaskForStatus}
+            isAdmin={isAdmin}
+            userName={userName}
+            addNotification={addNotification}
           />
         )}
         {/* BUG-008 FIXED: Pass projectId to GanttChart */}
@@ -374,6 +381,7 @@ export default function ProjectDetailPage() {
                       value={taskDueDate}
                       onChange={(e) => setTaskDueDate(e.target.value)}
                       disabled={isCreatingTask}
+                      min={new Date().toISOString().split("T")[0]}
                       className="h-9 text-sm border-gray-200 focus-visible:ring-gold"
                     />
                   </div>

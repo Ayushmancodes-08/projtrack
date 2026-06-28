@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { AlertCircle, Plus, MessageSquare, Paperclip, Eye, HelpCircle } from "lucide-react"
 import { useState } from "react"
+import { toast } from "sonner"
 
 type KanbanTask = {
   id: string
@@ -27,6 +28,9 @@ type KanbanBoardProps = {
   updateTaskStatus: (projectId: string, taskId: string, newStatus: string) => Promise<void>
   onTaskClick?: (taskId: string) => void
   onAddTask?: (statusId: string) => void
+  isAdmin: boolean
+  userName: string
+  addNotification: (title: string, body: string, type: "review_request" | "info", task_id: string, project_id: string, user_name: string) => Promise<void>
 }
 
 const bgColorMap: Record<string, string> = {
@@ -71,7 +75,7 @@ const DEFAULT_WIP_LIMITS: Record<string, number> = {
   done: 8,         // Complete
 }
 
-export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTaskClick, onAddTask }: KanbanBoardProps) {
+export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTaskClick, onAddTask, isAdmin, userName, addNotification }: KanbanBoardProps) {
   // BUG-002 FIXED: No longer using local useState(initialTasks). Tasks come directly from the prop,
   // which is derived from the global store in the parent page. Local state only for UI overlays.
 
@@ -107,6 +111,49 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
       column.splice(destination.index, 0, removed)
       setLocalTasks({ ...localTasks, [sourceCol]: column })
     } else {
+      const destStatus = statuses.find((s) => s.id === destCol)
+      const isDestComplete = destStatus?.category === "done" || destCol === "done" || destCol === "complete" || destCol === "wrapped" || destCol === "live" || destCol === "published"
+
+      if (isDestComplete && !isAdmin) {
+        // Find if there is a "review" column
+        const reviewStatus = statuses.find((s) => s.category === "review" || s.id === "review" || s.id === "finishing" || s.id === "finalizing")
+        
+        if (reviewStatus) {
+          toast.warning(`Only Project Managers (Admins) can complete tasks. Moving task to "${reviewStatus.label}" for approval.`, {
+            duration: 5000
+          })
+          
+          if (sourceCol === reviewStatus.id) return
+
+          const sourceColumn = [...(localTasks[sourceCol] || [])]
+          const reviewColumn = [...(localTasks[reviewStatus.id] || [])]
+          const [removed] = sourceColumn.splice(source.index, 1)
+          
+          reviewColumn.splice(0, 0, removed)
+          setLocalTasks({ ...localTasks, [sourceCol]: sourceColumn, [reviewStatus.id]: reviewColumn })
+
+          updateTaskStatus(projectId, removed.id, reviewStatus.id).catch((e) => {
+            console.error("Failed to update task status", e)
+          })
+
+          // Add notification for the admin
+          addNotification(
+            "Review Confirmation Required",
+            `Team member "${userName}" requested approval to complete task "${removed.title}".`,
+            "review_request",
+            removed.id,
+            projectId,
+            userName
+          )
+        } else {
+          toast.error("Only Project Managers (Admins) can mark tasks as complete.", {
+            duration: 4000
+          })
+        }
+        return
+      }
+
+      const isDestReview = destStatus?.category === "review" || destCol === "review" || destCol === "finishing" || destCol === "finalizing"
       const sourceColumn = [...(localTasks[sourceCol] || [])]
       const destColumn = [...(localTasks[destCol] || [])]
       const [removed] = sourceColumn.splice(source.index, 1)
@@ -117,6 +164,18 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
       updateTaskStatus(projectId, removed.id, destCol).catch((e) => {
         console.error("Failed to update task status", e)
       })
+
+      if (isDestReview && !isAdmin) {
+        addNotification(
+          "Task Submitted for Review",
+          `Team member "${userName}" moved task "${removed.title}" to Review.`,
+          "review_request",
+          removed.id,
+          projectId,
+          userName
+        )
+        toast.info(`Task submitted for review. Admin has been notified.`)
+      }
     }
   }
 
@@ -212,12 +271,12 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="flex gap-5 overflow-x-auto pb-6" style={{ minHeight: "calc(100vh - 280px)" }}>
           {statuses.map((status) => {
-            // BUG-013 FIXED: Removed unused `isBacklog` variable
+            const isBacklog = status.id === "backlog" || status.id === "planning" || status.id === "brief" || status.id === "question" || status.id === "not_started" || status.id === "idea"
             const isPlanned = status.id === "todo"
-            const isComplete = status.id === "done"
+            const isComplete = status.id === "done" || status.id === "complete" || status.id === "wrapped" || status.id === "live" || status.id === "published"
             const colTasks = localTasks[status.id] || []
             const currentWipLimit = wipLimits[status.id] || 5
-            const isWipExceeded = colTasks.length > currentWipLimit
+            const isWipExceeded = !isBacklog && colTasks.length > currentWipLimit
 
             return (
               <div 
@@ -236,6 +295,15 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                   showDelivery && isComplete && "bg-green-50/40 border-green-400"
                 )}
               >
+                {/* Commitment Point Boundary on Backlog Column */}
+                {showCommitment && isBacklog && (
+                  <div className="absolute -right-[12px] top-4 bottom-4 w-[2px] border-r-2 border-dashed border-teal-500 z-20 flex items-center justify-center">
+                    <span className="bg-teal-500 text-[8px] text-white font-extrabold px-1.5 py-0.5 rounded shadow-sm tracking-wider uppercase whitespace-nowrap rotate-90 origin-center">
+                      Commitment Point
+                    </span>
+                  </div>
+                )}
+
                 {/* Visual Signals / Commitment / Delivery indicator points on column header */}
                 {showCommitment && isPlanned && (
                   <div className="absolute -top-2.5 -right-2.5 z-10 flex h-6 w-6 animate-pulse items-center justify-center rounded-full bg-teal-500 text-white shadow-md ring-4 ring-teal-100">
@@ -262,23 +330,31 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                       {/* WIP Limit Display and Configurator */}
                       {showWipLimits && (
                         <div className="flex items-center gap-1 mt-0.5">
-                          <span className={cn(
-                            "inline-flex items-center rounded-full px-1.5 py-0.2 text-[9px] font-bold shadow-xs",
-                            isWipExceeded
-                              ? "bg-red-100 text-red-700 animate-bounce"
-                              : "bg-purple-100 text-purple-800"
-                          )}>
-                            WIP: {colTasks.length}/{currentWipLimit}
-                          </span>
-                          <input
-                            type="number"
-                            min="1"
-                            max="20"
-                            value={currentWipLimit}
-                            onChange={(e) => updateWipLimit(status.id, parseInt(e.target.value) || 1)}
-                            className="w-8 h-4 text-[9px] border rounded bg-white text-center focus:outline-none text-slate-600 font-semibold"
-                            title="Edit WIP Limit"
-                          />
+                          {isBacklog ? (
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.2 text-[9px] font-bold text-slate-600 shadow-xs">
+                              WIP: {colTasks.length} (Infinite)
+                            </span>
+                          ) : (
+                            <>
+                              <span className={cn(
+                                "inline-flex items-center rounded-full px-1.5 py-0.2 text-[9px] font-bold shadow-xs",
+                                isWipExceeded
+                                  ? "bg-red-100 text-red-700 animate-bounce"
+                                  : "bg-purple-100 text-purple-800"
+                              )}>
+                                WIP: {colTasks.length}/{currentWipLimit}
+                              </span>
+                              <input
+                                type="number"
+                                min="1"
+                                max="20"
+                                value={currentWipLimit}
+                                onChange={(e) => updateWipLimit(status.id, parseInt(e.target.value) || 1)}
+                                className="w-8 h-4 text-[9px] border rounded bg-white text-center focus:outline-none text-slate-600 font-semibold"
+                                title="Edit WIP Limit"
+                              />
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
