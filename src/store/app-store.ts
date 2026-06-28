@@ -222,6 +222,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   deleteProject: async (projectId: string) => {
+    const projectToDelete = get().projects.find((p) => p.id === projectId)
     const updatedProjects = get().projects.filter((p) => p.id !== projectId)
     const updatedTasks = { ...get().tasks }
     delete updatedTasks[projectId]
@@ -234,6 +235,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       const supabase = createClient()
       await supabase.from("projects").delete().eq("id", projectId)
       await supabase.from("tasks").delete().eq("project_id", projectId)
+      
+      if (projectToDelete && projectToDelete.organization_id && projectToDelete.organization_id !== "personal") {
+        await supabase.from("workspace_members").delete().eq("workspace_id", projectToDelete.organization_id)
+      }
     } catch (e) {
       console.warn("Supabase delete failed", e)
     }

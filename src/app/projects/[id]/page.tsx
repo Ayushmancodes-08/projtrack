@@ -241,8 +241,22 @@ export default function ProjectDetailPage() {
   const handleDeleteProject = async () => {
     try {
       setIsDeleting(true)
+      
+      // Revoke team-member access by removing non-admin members from the Clerk organization
+      if (clerkOrg && memberships?.data) {
+        for (const mem of memberships.data) {
+          if (mem.role !== "org:admin" && mem.publicUserData?.userId) {
+            try {
+              await clerkOrg.removeMember(mem.publicUserData.userId)
+            } catch (err) {
+              console.warn(`Failed to revoke access for user ${mem.publicUserData.userId}`, err)
+            }
+          }
+        }
+      }
+
       await deleteProject(project.id)
-      toast.success("Project deleted successfully")
+      toast.success("Project deleted and team-member access revoked successfully")
       router.push("/projects")
     } catch {
       toast.error("Failed to delete project")
