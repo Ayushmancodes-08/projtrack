@@ -20,7 +20,8 @@ import {
   Columns3,
   Table2,
   AlertTriangle,
-  FolderOpen
+  FolderOpen,
+  Trash2
 } from "lucide-react"
 import { KanbanBoard } from "@/components/kanban/kanban-board"
 import { GanttChart } from "@/components/gantt/gantt-chart"
@@ -40,9 +41,14 @@ export default function ProjectDetailPage() {
   const router = useRouter()
   const projectId = params.id as string
 
-  const { projects, tasks: storeTasks, initializeStore, addTask, updateTaskStatus, isLoaded, addNotification } = useAppStore()
+  const { projects, tasks: storeTasks, initializeStore, addTask, updateTaskStatus, isLoaded, addNotification, deleteProject } = useAppStore()
   const { user: clerkUser } = useUser()
-  const { organization: clerkOrg, membership, memberships } = useOrganization()
+  const { organization: clerkOrg, membership, memberships } = useOrganization({
+    memberships: {
+      pageSize: 50,
+      keepPreviousData: true
+    }
+  })
 
   const isAdmin = !clerkOrg || membership?.role === "org:admin"
   const userName = clerkUser?.fullName || clerkUser?.primaryEmailAddress?.emailAddress || "Team Member"
@@ -59,6 +65,8 @@ export default function ProjectDetailPage() {
   const [taskDueDate, setTaskDueDate] = useState("")
   const [taskBlocked, setTaskBlocked] = useState(false)
   const [isCreatingTask, setIsCreatingTask] = useState(false)
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
     initializeStore()
@@ -147,7 +155,7 @@ export default function ProjectDetailPage() {
   const statuses: StatusConfig[] = project.status_config.length > 0 ? project.status_config : template.defaultStatuses
 
   // Map of active organization members for the assignee select list
-  const teamMembers = memberships?.data?.map((m) => {
+  const teamMembers = (memberships?.data?.map((m) => {
     const pd = m.publicUserData
     const name = pd?.firstName 
       ? `${pd.firstName} ${pd.lastName?.[0] || ""}`.trim()
@@ -156,7 +164,18 @@ export default function ProjectDetailPage() {
       ? `${pd.firstName[0]}${pd.lastName?.[0] || ""}`.toUpperCase()
       : pd?.identifier?.slice(0, 2).toUpperCase() || ""
     return { id: initials, name }
-  }) || []
+  }) || [])
+
+  // Fallback to the current user if not in an organization
+  if (teamMembers.length === 0 && clerkUser) {
+    const name = clerkUser.fullName || clerkUser.primaryEmailAddress?.emailAddress || "Me"
+    const initials = clerkUser.firstName 
+      ? `${clerkUser.firstName[0]}${clerkUser.lastName?.[0] || ""}`.toUpperCase()
+      : name.slice(0, 2).toUpperCase()
+    teamMembers.push({ id: initials, name })
+  }
+
+  const displayTeamCount = clerkOrg ? teamMembers.length : 1
 
   // Group tasks by status for the Kanban board view
   const tasksByStatus: Record<string, { id: string; title: string; priority?: string; assignee?: string; dueDate?: string; comments: number; attachments: number; blocked: boolean }[]> = {}
@@ -219,6 +238,20 @@ export default function ProjectDetailPage() {
     }
   }
 
+  const handleDeleteProject = async () => {
+    try {
+      setIsDeleting(true)
+      await deleteProject(project.id)
+      toast.success("Project deleted successfully")
+      router.push("/projects")
+    } catch {
+      toast.error("Failed to delete project")
+    } finally {
+      setIsDeleting(false)
+      setIsDeleteOpen(false)
+    }
+  }
+
   return (
     <AppShell>
       <div className="space-y-6">
@@ -236,7 +269,7 @@ export default function ProjectDetailPage() {
             <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5"><DollarSign className="h-3.5 w-3.5" />Workspace Project</span>
               <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />Due {project.deadline}</span>
-              <span className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5" />{teamMembers.length} team members</span>
+              <span className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5" />{displayTeamCount} team members</span>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -249,6 +282,17 @@ export default function ProjectDetailPage() {
             >
               Configure
             </Button>
+            {isAdmin && (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white flex items-center gap-1.5"
+                onClick={() => setIsDeleteOpen(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete Project
+              </Button>
+            )}
             <Button 
               size="sm" 
               onClick={() => { setDefaultStatus("todo"); setIsTaskOpen(true) }}
@@ -426,6 +470,42 @@ export default function ProjectDetailPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Project Confirmation Dialog */}
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent className="sm:max-w-md border-0 p-0 overflow-hidden shadow-2xl rounded-2xl bg-white">
+          <div className="p-6">
+            <DialogHeader className="mb-4">
+              <DialogTitle className="text-lg font-bold text-navy flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+                Delete Project
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-slate-600 mb-6">
+              Are you sure you want to delete <strong className="text-navy">{project.name}</strong>? This action is permanent and will delete all tasks associated with this project.
+            </p>
+            <DialogFooter className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsDeleteOpen(false)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="bg-red-600 hover:bg-red-700 text-white"
+                onClick={handleDeleteProject}
+                disabled={isDeleting}
+              >
+                {isDeleting ? "Deleting..." : "Delete Permanently"}
+              </Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </AppShell>

@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { useAppStore } from "@/store/app-store"
 import { Button } from "@/components/ui/button"
+import { useOrganization } from "@clerk/nextjs"
 
 const iconMap: Record<string, React.ElementType> = {
   LayoutDashboard,
@@ -32,6 +33,14 @@ const iconMap: Record<string, React.ElementType> = {
 export function Sidebar() {
   const pathname = usePathname()
   const { sidebarCollapsed, toggleSidebar } = useAppStore()
+  const { organization: clerkOrg, membership } = useOrganization()
+  const isAdmin = !clerkOrg || membership?.role === "org:admin"
+
+  const visibleItems = SIDEBAR_ITEMS.filter((item) => {
+    if (isAdmin) return true
+    // Non-admin users (Team Members / Clients) only see Dashboard, Projects, and Activity
+    return !["/portfolios", "/reports", "/audit", "/settings"].includes(item.href)
+  })
 
   return (
     <aside
@@ -67,7 +76,7 @@ export function Sidebar() {
         )}>
           Main
         </p>
-        {SIDEBAR_ITEMS.map((item) => {
+        {visibleItems.map((item) => {
           const Icon = iconMap[item.icon]
           const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
 

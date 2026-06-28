@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { Filter, AlertCircle } from "lucide-react"
 import { useAppStore } from "@/store/app-store"
+import { useUser, useOrganization } from "@clerk/nextjs"
 
 // BUG-010 FIXED: Build activity from actual store data (tasks created)
 // Note: Deep real-time activity logging requires Supabase triggers.
@@ -39,6 +40,14 @@ type FilterTab = typeof filterTabs[number]
 export default function ActivityFeedPage() {
   const { tasks: storeTasks, projects } = useAppStore()
   const [activeFilter, setActiveFilter] = useState<FilterTab>("All Activity")
+  
+  const { user: clerkUser } = useUser()
+  const { organization: clerkOrg, membership } = useOrganization()
+  const isAdmin = !clerkOrg || membership?.role === "org:admin"
+  const userRole = isAdmin ? "Program Manager" : "Team Member"
+  const selfInitials = clerkUser?.firstName 
+    ? `${clerkUser.firstName[0]}${clerkUser.lastName?.[0] || ""}`.toUpperCase()
+    : "YO"
 
   // BUG-010 FIXED: Derive activity items from real store data
   const storeActivities: ActivityItem[] = []
@@ -46,11 +55,18 @@ export default function ActivityFeedPage() {
   projects.forEach((project) => {
     const projectTasks = storeTasks[project.id] || []
     projectTasks.forEach((task) => {
+      // Determine actor and initials dynamically
+      const isSelf = !task.assignee_id || task.assignee_id === selfInitials
+      const actorName = isSelf 
+        ? `${userRole} (You)` 
+        : (task.assignee_id === "PM" ? "Program Manager" : `Team Member (${task.assignee_id})`)
+      const initials = isSelf ? selfInitials : (task.assignee_id || "TM")
+
       // Task creation events
       storeActivities.push({
         id: `create-${task.id}`,
-        actor: task.assignee_id || "You",
-        initials: task.assignee_id?.slice(0, 2).toUpperCase() || "YO",
+        actor: actorName,
+        initials: initials,
         action: "created task",
         target: task.title,
         time: new Date(task.created_at).toLocaleString(),
@@ -61,8 +77,8 @@ export default function ActivityFeedPage() {
       if (task.blocked_reason) {
         storeActivities.push({
           id: `blocked-${task.id}`,
-          actor: task.assignee_id || "You",
-          initials: task.assignee_id?.slice(0, 2).toUpperCase() || "YO",
+          actor: actorName,
+          initials: initials,
           action: "blocked",
           target: task.title,
           reason: task.blocked_reason,
@@ -75,13 +91,13 @@ export default function ActivityFeedPage() {
       if (task.status === "done") {
         storeActivities.push({
           id: `done-${task.id}`,
-          actor: task.assignee_id || "You",
-          initials: task.assignee_id?.slice(0, 2).toUpperCase() || "YO",
+          actor: actorName,
+          initials: initials,
           action: "completed",
           target: task.title,
           time: new Date(task.updated_at).toLocaleString(),
           type: "completion",
-        })
+      })
       }
     })
   })
@@ -169,8 +185,8 @@ export default function ActivityFeedPage() {
                       <span className="text-[10px] font-medium text-muted-foreground">{activity.time}</span>
                     </div>
                     <p className="mt-0.5 text-sm text-muted-foreground">
-                      {activity.action} <span className="font-medium text-navy">{activity.target}</span>
-                      {activity.to && <> to <span className="font-medium text-navy">{activity.to}</span></>}
+                      {activity.action} <span className="font-medium text-navy">"{activity.target}"</span>
+                      {activity.to && <> to <span className="font-medium text-navy">"{activity.to}"</span></>}
                       {activity.reason && <span className="text-muted-foreground/70"> &mdash; {activity.reason}</span>}
                     </p>
                   </div>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { AppShell } from "@/components/layout/app-shell"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +9,7 @@ import { Lock, ArrowRight, AlertCircle, FolderOpen } from "lucide-react"
 import { useAppStore } from "@/store/app-store"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent } from "@/components/ui/card"
+import { useUser, useOrganization } from "@clerk/nextjs"
 
 type AuditEntry = {
   timestamp: string
@@ -28,6 +29,14 @@ const actionColors: Record<string, string> = {
 
 export default function AuditLedgerPage() {
   const { projects, tasks, initializeStore, isLoaded } = useAppStore()
+  const { user: clerkUser } = useUser()
+  const { organization: clerkOrg, membership } = useOrganization()
+  
+  const isAdmin = !clerkOrg || membership?.role === "org:admin"
+  const userRole = isAdmin ? "Program Manager" : "Team Member"
+  const selfInitials = clerkUser?.firstName 
+    ? `${clerkUser.firstName[0]}${clerkUser.lastName?.[0] || ""}`.toUpperCase()
+    : "YO"
 
   useEffect(() => {
     initializeStore()
@@ -62,7 +71,7 @@ export default function AuditLedgerPage() {
         minute: "2-digit",
         hour12: false,
       }),
-      actor: "Workspace Owner",
+      actor: "Program Manager",
       action: "Project Created",
       field: "project_type",
       oldVal: "—",
@@ -72,6 +81,12 @@ export default function AuditLedgerPage() {
     // 2. Tasks events
     const projectTasks = tasks[p.id] || []
     projectTasks.forEach((t) => {
+      // Determine actor dynamically
+      const isSelf = !t.assignee_id || t.assignee_id === selfInitials
+      const actorName = isSelf 
+        ? `${userRole} (You)` 
+        : (t.assignee_id === "PM" ? "Program Manager" : `Team Member (${t.assignee_id})`)
+
       // Task creation event
       auditEntries.push({
         timestamp: new Date(t.created_at).toLocaleString("en-US", {
@@ -82,7 +97,7 @@ export default function AuditLedgerPage() {
           minute: "2-digit",
           hour12: false,
         }),
-        actor: t.assignee_id || "You",
+        actor: actorName,
         action: "Task Created",
         field: "status",
         oldVal: "—",
@@ -100,7 +115,7 @@ export default function AuditLedgerPage() {
             minute: "2-digit",
             hour12: false,
           }),
-          actor: t.assignee_id || "You",
+          actor: actorName,
           action: "Task Moved",
           field: "status",
           oldVal: "TODO",
@@ -119,7 +134,7 @@ export default function AuditLedgerPage() {
             minute: "2-digit",
             hour12: false,
           }),
-          actor: t.assignee_id || "You",
+          actor: actorName,
           action: "Impediment Flagged",
           field: "blocked_reason",
           oldVal: "—",
