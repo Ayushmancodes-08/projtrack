@@ -96,11 +96,19 @@ export default function DashboardPage() {
   }
 
   const allTypes = [...new Set(projects.map((p) => p.project_type))]
-  const totalTasks = Object.values(tasks).reduce((acc, curr) => acc + curr.length, 0)
-  const totalBlockedTasks = Object.values(tasks).reduce(
-    (acc, curr) => acc + curr.filter(t => t.status !== 'done' && (t.blocked_reason || t.priority === 'CRITICAL')).length,
-    0
-  )
+  
+  // Calculate tasks only for active projects to guarantee deleted projects' tasks are not counted
+  const totalTasks = projects.reduce((acc, project) => {
+    const projectTasks = tasks[project.id] || []
+    return acc + projectTasks.length
+  }, 0)
+
+  const totalBlockedTasks = projects.reduce((acc, project) => {
+    const projectTasks = tasks[project.id] || []
+    return acc + projectTasks.filter(
+      (t) => t.status !== "done" && (t.blocked_reason || t.priority === "CRITICAL")
+    ).length
+  }, 0)
 
   return (
     <AppShell>

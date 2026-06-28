@@ -112,11 +112,16 @@ export const useAppStore = create<AppState>((set, get) => ({
 
         if (!taskError && dbTasks) {
           const syncedTasks: Record<string, Task[]> = {}
+          const projectIds = new Set(syncedProjects.map((p) => p.id))
           
-          // BUG-005 FIXED: Replace `any` with SupabaseTaskRow
+          // BUG-055: Only load tasks for projects that actually exist
           dbTasks.forEach((t: SupabaseTaskRow) => {
             const projectId = t.project_id as string
             const taskId = t.id as string
+            
+            if (!projectIds.has(projectId)) {
+              return // Skip tasks for deleted projects
+            }
             
             if (!syncedTasks[projectId]) {
               syncedTasks[projectId] = []
