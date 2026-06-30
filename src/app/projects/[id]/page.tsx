@@ -143,6 +143,19 @@ export default function ProjectDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, projectId])
 
+  useEffect(() => {
+    // Disable main container vertical scroll to prevent nested scroll warnings on Kanban
+    const mainEl = document.querySelector("main")
+    if (mainEl) {
+      mainEl.style.overflowY = "hidden"
+    }
+    return () => {
+      if (mainEl) {
+        mainEl.style.overflowY = "auto"
+      }
+    }
+  }, [])
+
   const project = projects.find((p) => p.id === projectId)
   
   if (!isLoaded) {
