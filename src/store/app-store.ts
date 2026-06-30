@@ -30,6 +30,10 @@ type AppState = {
   deleteProject: (projectId: string) => Promise<void>
   addTask: (projectId: string, title: string, priority: Priority, assignee: string, dueDate: string, blocked: boolean, status?: string) => Promise<Task>
   updateTaskStatus: (projectId: string, taskId: string, newStatus: string) => Promise<void>
+  updateProjectDetails: (projectId: string, name: string, description: string, deadline: string, healthStatus: HealthStatus) => Promise<void>
+  updateProjectColumns: (projectId: string, columns: StatusConfig[]) => Promise<void>
+  addProjectMember: (projectId: string, email: string, role: string) => Promise<void>
+  removeProjectMember: (projectId: string, memberId: string) => Promise<void>
   syncWithSupabase: () => Promise<void>
   addNotification: (title: string, body: string, type: "review_request" | "info", task_id: string, project_id: string, user_name: string) => Promise<void>
   resolveNotification: (notificationId: string) => Promise<void>
@@ -85,31 +89,48 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const supabase = createClient()
       
-      // Fetch projects
-      const { data: dbProjects, error: projError } = await supabase
-        .from("projects")
-        .select("*")
-        .eq("workspace_id", workspaceId)
+      // Fetch projects - filter by workspace_id, but allow independent users to see 'personal' projects too
+      let query = supabase.from("projects").select("*")
+      if (currentUser?.isTeamMember) {
+        query = query.eq("workspace_id", workspaceId)
+      } else {
+        query = query.or(`workspace_id.eq.${workspaceId},workspace_id.eq.personal`)
+      }
+      
+      const { data: dbProjects, error: projError } = await query
       
       if (!projError && dbProjects) {
         // Map DB projects to frontend Projects structure
         const syncedProjects: Project[] = dbProjects.map((p: Record<string, unknown>) => {
           const matchedLocal = projects.find((lp) => lp.id === p.id)
+          
+          // Parse status_config from DB if it exists, otherwise fallback to local or empty
+          let dbStatuses: StatusConfig[] = []
+          if (p.status_config) {
+            try {
+              dbStatuses = typeof p.status_config === "string" 
+                ? JSON.parse(p.status_config) 
+                : (p.status_config as StatusConfig[])
+            } catch (e) {
+              console.error("Failed to parse status_config", e)
+            }
+          }
+
           return {
             id: p.id as string,
             portfolio_id: null,
             organization_id: (p.workspace_id as string) || "personal",
             name: p.name as string,
-            description: "",
+            description: (p.description as string) || matchedLocal?.description || "",
             project_type: (p.status as ProjectType) || matchedLocal?.project_type || "SOFTWARE",
             budget: null,
-            deadline: matchedLocal?.deadline || null,
+            deadline: (p.deadline as string) || matchedLocal?.deadline || null,
             client_name: null,
             location: null,
             health_status: (p.color as HealthStatus) || "ON_TRACK",
             is_completed: false,
             custom_fields: null,
-            status_config: matchedLocal?.status_config || [],
+            status_config: dbStatuses.length > 0 ? dbStatuses : (matchedLocal?.status_config || []),
             created_at: p.created_at as string,
             updated_at: p.updated_at as string
           }
@@ -234,7 +255,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         workspace_id: workspaceId,
         name: newProject.name,
         color: newProject.health_status,
-        status: newProject.project_type
+        status: newProject.project_type,
+        description: newProject.description,
+        deadline: newProject.deadline,
+        status_config: statuses // save columns in DB
       })
     } catch (e) {
       console.warn("Supabase save failed, cached in LocalStorage", e)
@@ -342,13 +366,102 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     set({ tasks: updatedTasks })
-    localStorage.setItem("projtrack_tasks", JSON.stringify(updatedTasks))
+    const currentUser = get().user
+    const workspaceId = currentUser?.organizationId || "personal"
+    localStorage.setItem(`projtrack_tasks_${workspaceId}`, JSON.stringify(updatedTasks))
 
     try {
       const supabase = createClient()
       await supabase.from("tasks").update({ status: newStatus }).eq("id", taskId)
     } catch (e) {
       console.warn("Supabase task status update failed", e)
+    }
+  },
+
+  updateProjectDetails: async (projectId: string, name: string, description: string, deadline: string, healthStatus: HealthStatus) => {
+    const updatedProjects = get().projects.map((p) => {
+      if (p.id === projectId) {
+        return {
+          ...p,
+          name,
+          description,
+          deadline,
+          health_status: healthStatus,
+          updated_at: new Date().toISOString()
+        }
+      }
+      return p
+    })
+
+    set({ projects: updatedProjects })
+    const currentUser = get().user
+    const workspaceId = currentUser?.organizationId || "personal"
+    localStorage.setItem(`projtrack_projects_${workspaceId}`, JSON.stringify(updatedProjects))
+
+    try {
+      const supabase = createClient()
+      await supabase.from("projects").update({
+        name,
+        description,
+        deadline,
+        color: healthStatus,
+        updated_at: new Date().toISOString()
+      }).eq("id", projectId)
+    } catch (e) {
+      console.warn("Supabase project update failed", e)
+    }
+  },
+
+  updateProjectColumns: async (projectId: string, columns: StatusConfig[]) => {
+    const updatedProjects = get().projects.map((p) => {
+      if (p.id === projectId) {
+        return {
+          ...p,
+          status_config: columns,
+          updated_at: new Date().toISOString()
+        }
+      }
+      return p
+    })
+
+    set({ projects: updatedProjects })
+    const currentUser = get().user
+    const workspaceId = currentUser?.organizationId || "personal"
+    localStorage.setItem(`projtrack_projects_${workspaceId}`, JSON.stringify(updatedProjects))
+
+    try {
+      const supabase = createClient()
+      await supabase.from("projects").update({
+        status_config: columns,
+        updated_at: new Date().toISOString()
+      }).eq("id", projectId)
+    } catch (e) {
+      console.warn("Supabase project columns update failed", e)
+    }
+  },
+
+  addProjectMember: async (projectId: string, email: string, role: string) => {
+    try {
+      const supabase = createClient()
+      await supabase.from("project_members").insert({
+        project_id: projectId,
+        email: email.trim().toLowerCase(),
+        role: role,
+        created_at: new Date().toISOString()
+      })
+    } catch (e) {
+      console.warn("Supabase add project member failed", e)
+      throw e
+    }
+  },
+
+  removeProjectMember: async (projectId: string, memberId: string) => {
+    try {
+      const supabase = createClient()
+      await supabase.from("project_members").delete().eq("id", memberId)
+    } catch (e) {
+      console.warn("Supabase remove project member failed", e)
+      throw e
     }
   },
 

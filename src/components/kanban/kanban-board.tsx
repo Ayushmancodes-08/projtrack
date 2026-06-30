@@ -9,6 +9,10 @@ import { Badge } from "@/components/ui/badge"
 import { AlertCircle, Plus, MessageSquare, Paperclip, Eye, HelpCircle } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Trash2 } from "lucide-react"
 
 type KanbanTask = {
   id: string
@@ -31,6 +35,7 @@ type KanbanBoardProps = {
   isAdmin: boolean
   userName: string
   addNotification: (title: string, body: string, type: "review_request" | "info", task_id: string, project_id: string, user_name: string) => Promise<void>
+  onUpdateColumns?: (projectId: string, columns: StatusConfig[]) => Promise<void>
 }
 
 const bgColorMap: Record<string, string> = {
@@ -75,7 +80,7 @@ const DEFAULT_WIP_LIMITS: Record<string, number> = {
   done: 8,         // Complete
 }
 
-export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTaskClick, onAddTask, isAdmin, userName, addNotification }: KanbanBoardProps) {
+export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTaskClick, onAddTask, isAdmin, userName, addNotification, onUpdateColumns }: KanbanBoardProps) {
   // BUG-002 FIXED: No longer using local useState(initialTasks). Tasks come directly from the prop,
   // which is derived from the global store in the parent page. Local state only for UI overlays.
 
@@ -98,6 +103,11 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
 
   // Customizable WIP limits
   const [wipLimits, setWipLimits] = useState<Record<string, number>>(DEFAULT_WIP_LIMITS)
+
+  // Column management state
+  const [isManageColsOpen, setIsManageColsOpen] = useState(false)
+  const [tempCols, setTempCols] = useState<StatusConfig[]>([])
+  const [isSavingCols, setIsSavingCols] = useState(false)
 
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return
@@ -265,6 +275,20 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
             <span className={cn("h-3 w-3 rounded-full border-2", showDelivery ? "bg-green-500 border-green-200" : "bg-slate-300 border-white")} />
             Delivery point
           </button>
+
+          {isAdmin && onUpdateColumns && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setTempCols(statuses)
+                setIsManageColsOpen(true)
+              }}
+              className="h-8 border-gold text-gold-dark hover:bg-gold/5 text-xs font-semibold cursor-pointer ml-auto"
+            >
+              Manage Columns
+            </Button>
+          )}
         </div>
       </div>
 
@@ -477,6 +501,116 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
           })}
         </div>
       </DragDropContext>
+      {/* Column Management Modal */}
+      <Dialog open={isManageColsOpen} onOpenChange={setIsManageColsOpen}>
+        <DialogContent className="sm:max-w-md border-0 p-0 overflow-hidden shadow-2xl rounded-2xl bg-white max-h-[80vh] flex flex-col">
+          <DialogHeader className="p-6 pb-2 shrink-0">
+            <DialogTitle className="text-lg font-bold text-navy">Manage Kanban Columns</DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto px-6 py-2 space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground font-medium">Customize your workflow stages</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const newId = `col_${Math.random().toString(36).substring(2, 9)}`
+                  const colors = ["blue", "amber", "green", "purple", "crimson", "teal", "indigo"]
+                  const randomColor = colors[Math.floor(Math.random() * colors.length)]
+                  setTempCols([
+                    ...tempCols,
+                    { id: newId, label: "New Column", color: randomColor, order: tempCols.length + 1, category: "todo" }
+                  ])
+                }}
+                className="h-7 text-xs border-gold text-gold-dark hover:bg-gold/5 cursor-pointer"
+              >
+                + Add Column
+              </Button>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {tempCols.map((col) => (
+                <div key={col.id} className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                  <div className={cn("h-3 w-3 rounded-full shrink-0", 
+                    col.color === "blue" ? "bg-blue-500" :
+                    col.color === "amber" ? "bg-amber-500" :
+                    col.color === "green" ? "bg-green-500" :
+                    col.color === "purple" ? "bg-purple-500" :
+                    col.color === "crimson" ? "bg-red-500" :
+                    col.color === "teal" ? "bg-teal-500" :
+                    col.color === "indigo" ? "bg-indigo-500" : "bg-slate-400"
+                  )} />
+                  <Input
+                    value={col.label}
+                    onChange={(e) => {
+                      setTempCols(tempCols.map(c => c.id === col.id ? { ...c, label: e.target.value } : c))
+                    }}
+                    className="h-8 text-xs focus-visible:ring-gold bg-white flex-1"
+                  />
+                  <select
+                    value={col.color}
+                    onChange={(e) => {
+                      setTempCols(tempCols.map(c => c.id === col.id ? { ...c, color: e.target.value } : c))
+                    }}
+                    className="h-8 text-[11px] rounded-md border border-gray-200 bg-white px-2 focus:outline-none"
+                  >
+                    <option value="blue">Blue</option>
+                    <option value="amber">Amber</option>
+                    <option value="green">Green</option>
+                    <option value="purple">Purple</option>
+                    <option value="crimson">Red</option>
+                    <option value="teal">Teal</option>
+                    <option value="indigo">Indigo</option>
+                  </select>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setTempCols(tempCols.filter(c => c.id !== col.id))}
+                    disabled={tempCols.length <= 1}
+                    className="h-8 w-8 text-slate-400 hover:text-red-500 rounded-md cursor-pointer flex items-center justify-center"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <DialogFooter className="bg-gray-50 px-6 py-4 border-t border-gray-100 flex sm:flex-row justify-end gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setIsManageColsOpen(false)}
+              className="text-xs hover:bg-gray-100 cursor-pointer"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                try {
+                  setIsSavingCols(true)
+                  if (onUpdateColumns) {
+                    await onUpdateColumns(projectId, tempCols)
+                  }
+                  toast.success("Kanban columns updated successfully!")
+                  setIsManageColsOpen(false)
+                } catch {
+                  toast.error("Failed to update columns")
+                } finally {
+                  setIsSavingCols(false)
+                }
+              }}
+              disabled={isSavingCols}
+              className="bg-gradient-to-r from-gold to-gold-dark text-navy text-xs font-semibold shadow-sm border-0 cursor-pointer"
+            >
+              {isSavingCols ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -18,11 +18,12 @@ import {
   FlaskConical,
   FolderKanban,
   ArrowLeft,
+  Trash2,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useAppStore } from "@/store/app-store"
-import type { ProjectType } from "@/lib/types"
+import type { ProjectType, StatusConfig } from "@/lib/types"
 import { toast } from "sonner"
 
 const iconMap: Record<string, React.ElementType> = {
@@ -45,6 +46,48 @@ export default function NewProjectPage() {
   // BUG-026 FIXED: deadline is now a real editable date field
   const [deadline, setDeadline] = useState("")
   const [isCreating, setIsCreating] = useState(false)
+  const [customColumns, setCustomColumns] = useState<StatusConfig[]>([])
+
+  const handleSelectTemplateType = (type: string) => {
+    setSelectedType(type)
+    const templ = PROJECT_TEMPLATES.find((t) => t.type === type)
+    if (templ) {
+      setCustomColumns(templ.defaultStatuses.map((s, idx) => ({ ...s, order: idx + 1 })))
+    }
+  }
+
+  const handleAddColumn = () => {
+    const newId = `col_${Math.random().toString(36).substring(2, 9)}`
+    const colors = ["blue", "amber", "green", "purple", "crimson", "teal", "indigo", "slate"]
+    const randomColor = colors[Math.floor(Math.random() * colors.length)]
+    
+    setCustomColumns([
+      ...customColumns,
+      {
+        id: newId,
+        label: `New Column`,
+        color: randomColor,
+        order: customColumns.length + 1,
+        category: "todo"
+      }
+    ])
+  }
+
+  const handleRenameColumn = (id: string, newLabel: string) => {
+    setCustomColumns(
+      customColumns.map((col) => (col.id === id ? { ...col, label: newLabel } : col))
+    )
+  }
+
+  const handleChangeColumnColor = (id: string, color: string) => {
+    setCustomColumns(
+      customColumns.map((col) => (col.id === id ? { ...col, color: color } : col))
+    )
+  }
+
+  const handleDeleteColumn = (id: string) => {
+    setCustomColumns(customColumns.filter((col) => col.id !== id))
+  }
 
   const template = selectedType
     ? PROJECT_TEMPLATES.find((t) => t.type === selectedType)
@@ -61,10 +104,11 @@ export default function NewProjectPage() {
     try {
       setIsCreating(true)
       // BUG-025 + BUG-026 FIXED: Pass description and deadline to addProject
+      // Pass the customized columns to addProject
       const newProj = await addProject(
         projectName,
         selectedType as ProjectType,
-        template.defaultStatuses,
+        customColumns,
         description.trim() || undefined,
         deadline || undefined
       )
@@ -105,7 +149,7 @@ export default function NewProjectPage() {
               return (
                 <button
                   key={t.type}
-                  onClick={() => setSelectedType(t.type)}
+                  onClick={() => handleSelectTemplateType(t.type)}
                   className={cn(
                     "flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all",
                     isSelected
@@ -203,20 +247,67 @@ export default function NewProjectPage() {
               </CardContent>
             </Card>
 
-            <Card className="border-0 shadow-sm">
-              <CardContent className="p-5 space-y-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Will auto-generate columns:
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {template.defaultStatuses.map((s) => (
-                    <Badge
-                      key={s.id}
-                      variant="outline"
-                      className="text-[10px] font-medium text-navy border-navy/20"
-                    >
-                      {s.label}
-                    </Badge>
+            <Card className="border-0 shadow-sm bg-white">
+              <CardContent className="p-5 space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-navy">
+                    Configure Kanban Columns
+                  </h3>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddColumn}
+                    className="h-7 text-xs border-gold text-gold-dark hover:bg-gold/5 cursor-pointer"
+                  >
+                    + Add Column
+                  </Button>
+                </div>
+                <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                  {customColumns.map((col) => (
+                    <div key={col.id} className="flex items-center gap-2 bg-slate-50/50 p-2 rounded-lg border border-slate-100">
+                      <div className={cn("h-3 w-3 rounded-full shrink-0", 
+                        col.color === "blue" ? "bg-blue-500" :
+                        col.color === "amber" ? "bg-amber-500" :
+                        col.color === "green" ? "bg-green-500" :
+                        col.color === "purple" ? "bg-purple-500" :
+                        col.color === "crimson" ? "bg-red-500" :
+                        col.color === "teal" ? "bg-teal-500" :
+                        col.color === "indigo" ? "bg-indigo-500" : "bg-slate-400"
+                      )} />
+                      <Input
+                        value={col.label}
+                        onChange={(e) => handleRenameColumn(col.id, e.target.value)}
+                        disabled={isCreating}
+                        placeholder="Column Name"
+                        className="h-8 text-xs focus-visible:ring-gold bg-white flex-1"
+                      />
+                      <select
+                        value={col.color}
+                        onChange={(e) => handleChangeColumnColor(col.id, e.target.value)}
+                        disabled={isCreating}
+                        className="h-8 text-[11px] rounded-md border border-gray-200 bg-white px-2 focus:outline-none focus:border-gold"
+                      >
+                        <option value="blue">Blue</option>
+                        <option value="amber">Amber</option>
+                        <option value="green">Green</option>
+                        <option value="purple">Purple</option>
+                        <option value="crimson">Red</option>
+                        <option value="teal">Teal</option>
+                        <option value="indigo">Indigo</option>
+                        <option value="slate">Slate</option>
+                      </select>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleDeleteColumn(col.id)}
+                        disabled={isCreating || customColumns.length <= 1}
+                        className="h-8 w-8 text-slate-400 hover:text-red-500 rounded-md cursor-pointer flex items-center justify-center"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   ))}
                 </div>
               </CardContent>
