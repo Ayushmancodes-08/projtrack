@@ -1,16 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { AppShell } from "@/components/layout/app-shell"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { Filter, AlertCircle } from "lucide-react"
 import { useAppStore } from "@/store/app-store"
 import { useAuth } from "@/lib/auth-context"
+import { createClient } from "@/lib/supabase/client"
+import { Skeleton } from "@/components/ui/skeleton"
 
-// BUG-010 FIXED: Build activity from actual store data (tasks created)
-// Note: Deep real-time activity logging requires Supabase triggers.
-// This version shows a live feed derived from the store's task state.
+// Live activity feed loaded from Supabase activity_logs table.
 
 type ActivityItem = {
   id: string
@@ -38,79 +38,89 @@ const filterTabs = ["All Activity", "Blockers", "Completions"] as const
 type FilterTab = typeof filterTabs[number]
 
 export default function ActivityFeedPage() {
-  const { tasks: storeTasks, projects } = useAppStore()
   const [activeFilter, setActiveFilter] = useState<FilterTab>("All Activity")
+  const [activities, setActivities] = useState<ActivityItem[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   
   const { user } = useAuth()
-  const isAdmin = user ? !user.isTeamMember : false
-  const userRole = isAdmin ? "Program Manager" : "Team Member"
-  const selfInitials = user?.fullName 
-    ? user.fullName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-    : "YO"
 
-  // BUG-010 FIXED: Derive activity items from real store data
-  const storeActivities: ActivityItem[] = []
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase
+          .from("activity_logs")
+          .select("*")
+          .order("created_at", { ascending: false })
+        
+        if (!error && data) {
+          const mapped: ActivityItem[] = data.map((log) => {
+            const isSelf = log.actor_email === user?.email
+            const actorName = isSelf ? `${log.actor_name} (You)` : log.actor_name
+            const initials = log.actor_name.slice(0, 2).toUpperCase()
+            
+            let actionText = ""
+            let activityType = "status"
+            
+            if (log.action === "project_created") {
+              actionText = "created project"
+              activityType = "creation"
+            } else if (log.action === "task_created") {
+              actionText = "created task"
+              activityType = "creation"
+            } else if (log.action === "status_changed") {
+              actionText = `moved task to "${log.new_value}"`
+              activityType = log.new_value?.toLowerCase() === "completed" || log.new_value?.toLowerCase() === "done" ? "completion" : "status"
+            }
 
-  projects.forEach((project) => {
-    const projectTasks = storeTasks[project.id] || []
-    projectTasks.forEach((task) => {
-      // Determine actor and initials dynamically
-      const isSelf = !task.assignee_id || task.assignee_id === selfInitials
-      const actorName = isSelf 
-        ? `${userRole} (You)` 
-        : (task.assignee_id === "PM" ? "Program Manager" : `Team Member (${task.assignee_id})`)
-      const initials = isSelf ? selfInitials : (task.assignee_id || "TM")
-
-      // Task creation events
-      storeActivities.push({
-        id: `create-${task.id}`,
-        actor: actorName,
-        initials: initials,
-        action: "created task",
-        target: task.title,
-        time: new Date(task.created_at).toLocaleString(),
-        type: "creation",
-      })
-
-      // Blocked events
-      if (task.blocked_reason) {
-        storeActivities.push({
-          id: `blocked-${task.id}`,
-          actor: actorName,
-          initials: initials,
-          action: "blocked",
-          target: task.title,
-          reason: task.blocked_reason,
-          time: new Date(task.updated_at).toLocaleString(),
-          type: "blocker",
-        })
+            return {
+              id: log.id,
+              actor: actorName,
+              initials: initials,
+              action: actionText,
+              target: log.details || "",
+              time: new Date(log.created_at).toLocaleString(),
+              type: activityType,
+              to: log.new_value || undefined
+            }
+          })
+          setActivities(mapped)
+        }
+      } catch (e) {
+        console.error("Failed to fetch activity logs", e)
+      } finally {
+        setIsLoading(false)
       }
+    }
+    
+    if (user) {
+      fetchLogs()
+    }
+  }, [user])
 
-      // Completion events
-      if (task.status === "done") {
-        storeActivities.push({
-          id: `done-${task.id}`,
-          actor: actorName,
-          initials: initials,
-          action: "completed",
-          target: task.title,
-          time: new Date(task.updated_at).toLocaleString(),
-          type: "completion",
-      })
-      }
-    })
-  })
+  if (isLoading) {
+    return (
+      <AppShell>
+        <div className="space-y-6">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-10 w-full rounded-xl" />
+          <div className="space-y-3">
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
+          </div>
+        </div>
+      </AppShell>
+    )
+  }
 
-  // Sort by most recent
-  storeActivities.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
-
-  // BUG-010 FIXED: Filter tabs actually filter by type
+  // Filter tabs
   const filtered =
     activeFilter === "All Activity"
-      ? storeActivities
+      ? activities
       : activeFilter === "Blockers"
-      ? storeActivities.filter((a) => a.type === "blocker")
-      : storeActivities.filter((a) => a.type === "completion")
+      ? activities.filter((a) => a.type === "blocker")
+      : activities.filter((a) => a.type === "completion")
 
   return (
     <AppShell>
@@ -126,13 +136,7 @@ export default function ActivityFeedPage() {
           </button>
         </div>
 
-        {/* Demo notice */}
-        <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700 font-medium">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          Activity is derived from your current projects and tasks. Full real-time event streaming requires Supabase triggers.
-        </div>
-
-        {/* BUG-010 FIXED: Filter tabs are now functional */}
+        {/* Filter tabs */}
         <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
           {filterTabs.map((filter) => (
             <button

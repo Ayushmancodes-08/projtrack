@@ -10,6 +10,7 @@ import { useAppStore } from "@/store/app-store"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent } from "@/components/ui/card"
 import { useAuth } from "@/lib/auth-context"
+import { createClient } from "@/lib/supabase/client"
 
 type AuditEntry = {
   timestamp: string
@@ -28,23 +29,70 @@ const actionColors: Record<string, string> = {
 }
 
 export default function AuditLedgerPage() {
-  const { projects, tasks, initializeStore, isLoaded } = useAppStore()
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const { user } = useAuth()
-  
-  const isAdmin = user ? !user.isTeamMember : false
-  const userRole = isAdmin ? "Program Manager" : "Team Member"
-  const selfInitials = user?.fullName 
-    ? user.fullName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-    : "YO"
 
   useEffect(() => {
-    if (user) {
-      initializeStore(user)
+    const fetchAuditLogs = async () => {
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase
+          .from("activity_logs")
+          .select("*")
+          .order("created_at", { ascending: false })
+
+        if (!error && data) {
+          const mapped: AuditEntry[] = data.map((log) => {
+            const isSelf = log.actor_email === user?.email
+            const actorName = isSelf ? `${log.actor_name} (You)` : log.actor_name
+
+            let actionText = "Task Moved"
+            let fieldChanged = "status"
+            let oldVal = log.old_value || "—"
+            let newVal = log.new_value || "—"
+
+            if (log.action === "project_created") {
+              actionText = "Project Created"
+              fieldChanged = "name"
+              newVal = log.details || "—"
+            } else if (log.action === "task_created") {
+              actionText = "Task Created"
+              fieldChanged = "title"
+              newVal = log.details || "—"
+            }
+
+            return {
+              timestamp: new Date(log.created_at).toLocaleString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+              }),
+              actor: actorName,
+              action: actionText,
+              field: fieldChanged,
+              oldVal: oldVal,
+              newVal: newVal,
+            }
+          })
+          setAuditEntries(mapped)
+        }
+      } catch (e) {
+        console.error("Failed to fetch audit logs", e)
+      } finally {
+        setIsLoading(false)
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    if (user) {
+      fetchAuditLogs()
+    }
   }, [user])
 
-  if (!isLoaded) {
+  if (isLoading) {
     return (
       <AppShell>
         <div className="space-y-6">
@@ -57,96 +105,6 @@ export default function AuditLedgerPage() {
       </AppShell>
     )
   }
-
-  // Dynamically generate audit entries from workspace state
-  const auditEntries: AuditEntry[] = []
-
-  projects.forEach((p) => {
-    // 1. Project creation event
-    auditEntries.push({
-      timestamp: new Date(p.created_at).toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      }),
-      actor: "Program Manager",
-      action: "Project Created",
-      field: "project_type",
-      oldVal: "—",
-      newVal: p.project_type,
-    })
-
-    // 2. Tasks events
-    const projectTasks = tasks[p.id] || []
-    projectTasks.forEach((t) => {
-      // Determine actor dynamically
-      const isSelf = !t.assignee_id || t.assignee_id === selfInitials
-      const actorName = isSelf 
-        ? `${userRole} (You)` 
-        : (t.assignee_id === "PM" ? "Program Manager" : `Team Member (${t.assignee_id})`)
-
-      // Task creation event
-      auditEntries.push({
-        timestamp: new Date(t.created_at).toLocaleString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        }),
-        actor: actorName,
-        action: "Task Created",
-        field: "status",
-        oldVal: "—",
-        newVal: t.status.toUpperCase(),
-      })
-
-      // Task status changes (approximated from update timestamp)
-      if (t.updated_at !== t.created_at) {
-        auditEntries.push({
-          timestamp: new Date(t.updated_at).toLocaleString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-          }),
-          actor: actorName,
-          action: "Task Moved",
-          field: "status",
-          oldVal: "TODO",
-          newVal: t.status.toUpperCase(),
-        })
-      }
-
-      // Blocked / Impediment events
-      if (t.blocked_reason) {
-        auditEntries.push({
-          timestamp: new Date(t.updated_at).toLocaleString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-          }),
-          actor: actorName,
-          action: "Impediment Flagged",
-          field: "blocked_reason",
-          oldVal: "—",
-          newVal: t.blocked_reason,
-        })
-      }
-    })
-  })
-
-  // Sort audit entries by timestamp descending
-  auditEntries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 
   return (
     <AppShell>

@@ -144,7 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw error
     }
     await checkSession()
-    router.push("/dashboard")
+    window.location.href = "/dashboard"
   }
 
   const signUpAsIndependent = async (email: string, password: string, fullName: string) => {
@@ -177,7 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     await checkSession()
-    router.push("/dashboard")
+    window.location.href = "/dashboard"
   }
 
   const loginAsTeamMember = async (email: string, code: string) => {
@@ -224,7 +224,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false)
     setIsLoaded(true)
     toast.success("Successfully logged in as Team Member!")
-    router.push("/dashboard")
+    window.location.href = "/dashboard"
   }
 
   const signOut = async () => {
@@ -233,7 +233,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut()
     setUser(null)
     setLoading(false)
-    router.push("/login")
+    window.location.href = "/login"
   }
 
   const refreshSession = async () => {

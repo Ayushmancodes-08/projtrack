@@ -14,6 +14,29 @@ export type AppNotification = {
   resolved: boolean
 }
 
+const logActivity = async (projectId: string | null, taskId: string | null, action: string, details?: string, oldValue?: string, newValue?: string) => {
+  try {
+    const supabase = createClient()
+    const currentUser = useAppStore.getState().user
+    const actorEmail = currentUser?.email || "system@projtrack.com"
+    const actorName = currentUser?.fullName || currentUser?.email || "System"
+
+    await supabase.from("activity_logs").insert({
+      project_id: projectId,
+      task_id: taskId,
+      actor_email: actorEmail,
+      actor_name: actorName,
+      action: action,
+      details: details,
+      old_value: oldValue,
+      new_value: newValue,
+      created_at: new Date().toISOString()
+    })
+  } catch (e) {
+    console.warn("Failed to write activity log", e)
+  }
+}
+
 type AppState = {
   projects: Project[]
   tasks: Record<string, Task[]> // project_id -> Task[]
@@ -260,6 +283,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         deadline: newProject.deadline,
         status_config: statuses // save columns in DB
       })
+      await logActivity(newProject.id, null, "project_created", newProject.name)
     } catch (e) {
       console.warn("Supabase save failed, cached in LocalStorage", e)
     }
@@ -344,6 +368,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         due_date: newTask.due_date ? new Date(newTask.due_date).toISOString() : null,
         assignee_id: null // optional UI lookup
       })
+      await logActivity(projectId, newTask.id, "task_created", title)
     } catch (e) {
       console.warn("Supabase task save failed", e)
     }
@@ -353,6 +378,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateTaskStatus: async (projectId: string, taskId: string, newStatus: string) => {
     const currentProjectTasks = get().tasks[projectId] || []
+    const task = currentProjectTasks.find(t => t.id === taskId)
+    const oldStatus = task?.status || ""
+    const taskTitle = task?.title || ""
+
     const updatedTasksForProject = currentProjectTasks.map((t) => {
       if (t.id === taskId) {
         return { ...t, status: newStatus, updated_at: new Date().toISOString() }
@@ -373,6 +402,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const supabase = createClient()
       await supabase.from("tasks").update({ status: newStatus }).eq("id", taskId)
+      await logActivity(projectId, taskId, "status_changed", taskTitle, oldStatus, newStatus)
     } catch (e) {
       console.warn("Supabase task status update failed", e)
     }

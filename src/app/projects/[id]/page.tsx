@@ -21,7 +21,9 @@ import {
   Table2,
   AlertTriangle,
   FolderOpen,
-  Trash2
+  Trash2,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react"
 import { KanbanBoard } from "@/components/kanban/kanban-board"
 import { GanttChart } from "@/components/gantt/gantt-chart"
@@ -399,6 +401,9 @@ export default function ProjectDetailPage() {
             isAdmin={isAdmin}
             userName={userName}
             addNotification={addNotification}
+            onUpdateColumns={useAppStore.getState().updateProjectColumns}
+            userEmail={user?.email || ""}
+            isTeamMember={user?.isTeamMember || false}
           />
         )}
         {/* BUG-008 FIXED: Pass projectId to GanttChart */}
@@ -654,7 +659,7 @@ export default function ProjectDetailPage() {
               </div>
 
               <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                {configColumns.map((col) => (
+                {configColumns.map((col, idx) => (
                   <div key={col.id} className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
                     <div className={cn("h-3 w-3 rounded-full shrink-0", 
                       col.color === "blue" ? "bg-blue-500" :
@@ -687,13 +692,55 @@ export default function ProjectDetailPage() {
                       <option value="teal">Teal</option>
                       <option value="indigo">Indigo</option>
                     </select>
+
+                    <div className="flex gap-1 shrink-0">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => {
+                          const nextIndex = idx - 1
+                          if (nextIndex >= 0) {
+                            const updated = [...configColumns]
+                            const temp = updated[idx]
+                            updated[idx] = updated[nextIndex]
+                            updated[nextIndex] = temp
+                            setConfigColumns(updated.map((c, i) => ({ ...c, order: i + 1 })))
+                          }
+                        }}
+                        disabled={idx === 0}
+                        className="h-8 w-8 text-slate-400 hover:text-navy rounded-md cursor-pointer flex items-center justify-center"
+                      >
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => {
+                          const nextIndex = idx + 1
+                          if (nextIndex < configColumns.length) {
+                            const updated = [...configColumns]
+                            const temp = updated[idx]
+                            updated[idx] = updated[nextIndex]
+                            updated[nextIndex] = temp
+                            setConfigColumns(updated.map((c, i) => ({ ...c, order: i + 1 })))
+                          }
+                        }}
+                        disabled={idx === configColumns.length - 1}
+                        className="h-8 w-8 text-slate-400 hover:text-navy rounded-md cursor-pointer flex items-center justify-center"
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon-sm"
                       onClick={() => setConfigColumns(configColumns.filter(c => c.id !== col.id))}
                       disabled={configColumns.length <= 1}
-                      className="h-8 w-8 text-slate-400 hover:text-red-500 rounded-md cursor-pointer flex items-center justify-center"
+                      className="h-8 w-8 text-slate-400 hover:text-red-500 rounded-md cursor-pointer flex items-center justify-center shrink-0"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>

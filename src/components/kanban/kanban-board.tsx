@@ -12,7 +12,7 @@ import { toast } from "sonner"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Trash2 } from "lucide-react"
+import { Trash2, ArrowUp, ArrowDown } from "lucide-react"
 
 type KanbanTask = {
   id: string
@@ -36,6 +36,8 @@ type KanbanBoardProps = {
   userName: string
   addNotification: (title: string, body: string, type: "review_request" | "info", task_id: string, project_id: string, user_name: string) => Promise<void>
   onUpdateColumns?: (projectId: string, columns: StatusConfig[]) => Promise<void>
+  userEmail?: string
+  isTeamMember?: boolean
 }
 
 const bgColorMap: Record<string, string> = {
@@ -80,7 +82,7 @@ const DEFAULT_WIP_LIMITS: Record<string, number> = {
   done: 8,         // Complete
 }
 
-export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTaskClick, onAddTask, isAdmin, userName, addNotification, onUpdateColumns }: KanbanBoardProps) {
+export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTaskClick, onAddTask, isAdmin, userName, addNotification, onUpdateColumns, userEmail = "", isTeamMember = false }: KanbanBoardProps) {
   // BUG-002 FIXED: No longer using local useState(initialTasks). Tasks come directly from the prop,
   // which is derived from the global store in the parent page. Local state only for UI overlays.
 
@@ -122,7 +124,7 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
       setLocalTasks({ ...localTasks, [sourceCol]: column })
     } else {
       const destStatus = statuses.find((s) => s.id === destCol)
-      const isDestComplete = destStatus?.category === "done" || destCol === "done" || destCol === "complete" || destCol === "wrapped" || destCol === "live" || destCol === "published"
+      const isDestComplete = destStatus?.category === "done" || destCol === "completed" || destCol === "done" || destCol === "complete" || destCol === "wrapped" || destCol === "live" || destCol === "published"
 
       if (isDestComplete && !isAdmin) {
         // Find if there is a "review" column
@@ -408,9 +410,13 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                       {colTasks.map((task, index) => {
                         const priority = PRIORITIES.find((p) => p.value === task.priority)
                         const hasVisualSignal = showVisualSignals && (task.blocked || task.priority === "CRITICAL")
+                        
+                        // Restrict team members to only drag their own tasks, others appear dull
+                        const isAssignedToMe = !isTeamMember || (task.assignee && task.assignee.trim().toLowerCase() === userEmail.trim().toLowerCase())
+                        const isDragDisabled = isTeamMember && !isAssignedToMe
 
                         return (
-                          <Draggable key={task.id} draggableId={task.id} index={index}>
+                          <Draggable key={task.id} draggableId={task.id} index={index} isDragDisabled={isDragDisabled}>
                             {(provided, snapshot) => (
                               <div
                                 ref={provided.innerRef}
@@ -424,7 +430,9 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                                     ? "shadow-elevated rotate-1 scale-[1.02]"
                                     : "border-slate-200/80 hover:border-slate-300",
                                   // Visual Signal: Red border and highlight indicator if active and task is blocked/critical
-                                  hasVisualSignal && "border-red-400 ring-2 ring-red-100 bg-red-50/10"
+                                  hasVisualSignal && "border-red-400 ring-2 ring-red-100 bg-red-50/10",
+                                  // Dull mode for other members' tasks
+                                  isDragDisabled && "opacity-45 hover:opacity-50"
                                 )}
                               >
                                 {/* Red visual signal circle in card corner */}
@@ -531,7 +539,7 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
             </div>
 
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-              {tempCols.map((col) => (
+              {tempCols.map((col, idx) => (
                 <div key={col.id} className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
                   <div className={cn("h-3 w-3 rounded-full shrink-0", 
                     col.color === "blue" ? "bg-blue-500" :
@@ -564,13 +572,55 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                     <option value="teal">Teal</option>
                     <option value="indigo">Indigo</option>
                   </select>
+
+                  <div className="flex gap-1 shrink-0">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => {
+                        const nextIndex = idx - 1
+                        if (nextIndex >= 0) {
+                          const updated = [...tempCols]
+                          const temp = updated[idx]
+                          updated[idx] = updated[nextIndex]
+                          updated[nextIndex] = temp
+                          setTempCols(updated.map((c, i) => ({ ...c, order: i + 1 })))
+                        }
+                      }}
+                      disabled={idx === 0}
+                      className="h-8 w-8 text-slate-400 hover:text-navy rounded-md cursor-pointer flex items-center justify-center"
+                    >
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => {
+                        const nextIndex = idx + 1
+                        if (nextIndex < tempCols.length) {
+                          const updated = [...tempCols]
+                          const temp = updated[idx]
+                          updated[idx] = updated[nextIndex]
+                          updated[nextIndex] = temp
+                          setTempCols(updated.map((c, i) => ({ ...c, order: i + 1 })))
+                        }
+                      }}
+                      disabled={idx === tempCols.length - 1}
+                      className="h-8 w-8 text-slate-400 hover:text-navy rounded-md cursor-pointer flex items-center justify-center"
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => setTempCols(tempCols.filter(c => c.id !== col.id))}
                     disabled={tempCols.length <= 1}
-                    className="h-8 w-8 text-slate-400 hover:text-red-500 rounded-md cursor-pointer flex items-center justify-center"
+                    className="h-8 w-8 text-slate-400 hover:text-red-500 rounded-md cursor-pointer flex items-center justify-center shrink-0"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>

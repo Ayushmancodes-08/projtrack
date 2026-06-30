@@ -19,6 +19,8 @@ import {
   FolderKanban,
   ArrowLeft,
   Trash2,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -87,6 +89,16 @@ export default function NewProjectPage() {
 
   const handleDeleteColumn = (id: string) => {
     setCustomColumns(customColumns.filter((col) => col.id !== id))
+  }
+
+  const handleMoveColumn = (index: number, direction: "up" | "down") => {
+    const nextIndex = direction === "up" ? index - 1 : index + 1
+    if (nextIndex < 0 || nextIndex >= customColumns.length) return
+    const updated = [...customColumns]
+    const temp = updated[index]
+    updated[index] = updated[nextIndex]
+    updated[nextIndex] = temp
+    setCustomColumns(updated.map((col, idx) => ({ ...col, order: idx + 1 })))
   }
 
   const template = selectedType
@@ -264,7 +276,7 @@ export default function NewProjectPage() {
                   </Button>
                 </div>
                 <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
-                  {customColumns.map((col) => (
+                  {customColumns.map((col, idx) => (
                     <div key={col.id} className="flex items-center gap-2 bg-slate-50/50 p-2 rounded-lg border border-slate-100">
                       <div className={cn("h-3 w-3 rounded-full shrink-0", 
                         col.color === "blue" ? "bg-blue-500" :
@@ -297,13 +309,37 @@ export default function NewProjectPage() {
                         <option value="indigo">Indigo</option>
                         <option value="slate">Slate</option>
                       </select>
+                      
+                      <div className="flex gap-1 shrink-0">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleMoveColumn(idx, "up")}
+                          disabled={isCreating || idx === 0}
+                          className="h-8 w-8 text-slate-400 hover:text-navy rounded-md cursor-pointer flex items-center justify-center"
+                        >
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleMoveColumn(idx, "down")}
+                          disabled={isCreating || idx === customColumns.length - 1}
+                          className="h-8 w-8 text-slate-400 hover:text-navy rounded-md cursor-pointer flex items-center justify-center"
+                        >
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon-sm"
                         onClick={() => handleDeleteColumn(col.id)}
                         disabled={isCreating || customColumns.length <= 1}
-                        className="h-8 w-8 text-slate-400 hover:text-red-500 rounded-md cursor-pointer flex items-center justify-center"
+                        className="h-8 w-8 text-slate-400 hover:text-red-500 rounded-md cursor-pointer flex items-center justify-center shrink-0"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
