@@ -94,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser({
           id: session.user.id,
           email: session.user.email || "",
-          fullName: profile?.full_name || session.user.email?.split("@")[0] || "Independent User",
+          fullName: profile?.full_name || session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "Independent User",
           avatarUrl: profile?.avatar_url || null,
           role: "OWNER", // Independent users are OWNERS of their workspace
           isTeamMember: false,
