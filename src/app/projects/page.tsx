@@ -13,6 +13,7 @@ import Link from "next/link"
 import { useAppStore } from "@/store/app-store"
 import { useSearchParams } from "next/navigation"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAuth } from "@/lib/auth-context"
 
 const iconMap: Record<string, React.ElementType> = {
   Code2, HardHat, CalendarCheck, Megaphone, FlaskConical, FolderKanban,
@@ -25,6 +26,7 @@ const healthColors: Record<string, string> = {
 }
 
 function ProjectsPageContent() {
+  const { user } = useAuth()
   const { projects, tasks, initializeStore, isLoaded } = useAppStore()
   const searchParams = useSearchParams()
 
@@ -32,9 +34,11 @@ function ProjectsPageContent() {
   const [query, setQuery] = useState(searchParams.get("q") || "")
 
   useEffect(() => {
-    initializeStore()
+    if (user) {
+      initializeStore(user)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [user])
 
   if (!isLoaded) {
     return (
@@ -92,12 +96,14 @@ function ProjectsPageContent() {
               {projects.length} {projects.length === 1 ? 'project' : 'projects'} active in your workspace
             </p>
           </div>
-          <Link href="/projects/new">
-            <Button className="bg-gradient-to-r from-navy to-navy-lighter text-xs font-semibold shadow-sm hover:shadow-md">
-              <Plus className="mr-1.5 h-4 w-4" />
-              New Project
-            </Button>
-          </Link>
+          {!user?.isTeamMember && (
+            <Link href="/projects/new">
+              <Button className="bg-gradient-to-r from-navy to-navy-lighter text-xs font-semibold shadow-sm hover:shadow-md border-0 cursor-pointer">
+                <Plus className="mr-1.5 h-4 w-4" />
+                New Project
+              </Button>
+            </Link>
+          )}
         </div>
 
         {projects.length === 0 ? (
@@ -109,14 +115,19 @@ function ProjectsPageContent() {
               <div className="space-y-1.5 max-w-sm">
                 <h3 className="text-sm font-bold text-navy">No Projects Created</h3>
                 <p className="text-xs text-muted-foreground">
-                  Get started by creating your first workspace project. Choose a template to pre-configure columns.
+                  {user?.isTeamMember 
+                    ? "You haven't been assigned to any projects yet. Please contact your workspace administrator."
+                    : "Get started by creating your first workspace project. Choose a template to pre-configure columns."
+                  }
                 </p>
               </div>
-              <Link href="/projects/new" className="pt-2">
-                <Button className="bg-gradient-to-r from-gold to-gold-dark text-navy text-xs font-semibold shadow-sm">
-                  Create First Project
-                </Button>
-              </Link>
+              {!user?.isTeamMember && (
+                <Link href="/projects/new" className="pt-2">
+                  <Button className="bg-gradient-to-r from-gold to-gold-dark text-navy text-xs font-semibold shadow-sm border-0 cursor-pointer">
+                    Create First Project
+                  </Button>
+                </Link>
+              )}
             </CardContent>
           </Card>
         ) : (

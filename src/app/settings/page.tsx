@@ -1,16 +1,17 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { AppShell } from "@/components/layout/app-shell"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { UserPlus, Shield, AlertCircle, Trash2 } from "lucide-react"
-import { useOrganization, useUser, OrganizationSwitcher, CreateOrganization } from "@clerk/nextjs"
+import { UserPlus, Shield, AlertCircle, Trash2, Copy, Check } from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
+import { createClient } from "@/lib/supabase/client"
 import {
   Dialog,
   DialogContent,
@@ -22,63 +23,96 @@ import {
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 
+type Invitation = {
+  id: string
+  email: string
+  code: string
+  organization_id: string
+  role: string
+  custom_title: string
+  created_at: string
+}
+
+type WorkspaceMember = {
+  id: string
+  workspace_id: string
+  user_id: string
+  email: string
+  role: string
+  custom_title: string
+  created_at: string
+}
+
 export default function SettingsPage() {
-  const { isLoaded: userLoaded, user } = useUser()
-  const { 
-    isLoaded: orgLoaded, 
-    organization, 
-    memberships, 
-    invitations 
-  } = useOrganization({
-    memberships: {
-      pageSize: 20,
-      keepPreviousData: true
-    },
-    invitations: {
-      pageSize: 20,
-      keepPreviousData: true
-    }
-  })
+  const { user, isLoaded } = useAuth()
+  const supabase = createClient()
 
   const [orgName, setOrgName] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [email, setEmail] = useState("")
-  const [role, setRole] = useState("org:member")
+  const [role, setRole] = useState("DEVELOPER")
   const [customTitle, setCustomTitle] = useState("")
   const [isSavingOrg, setIsSavingOrg] = useState(false)
   const [isInviting, setIsInviting] = useState(false)
-  const [memberTitles, setMemberTitles] = useState<Record<string, string>>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        return JSON.parse(localStorage.getItem("projtrack_member_titles") || "{}")
-      } catch {
-        return {}
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  
+  const [invitations, setInvitations] = useState<Invitation[]>([])
+  const [members, setMembers] = useState<WorkspaceMember[]>([])
+  const [isLoadingData, setIsLoadingData] = useState(true)
+
+  const fetchSettingsData = async () => {
+    if (!user) return
+    setIsLoadingData(true)
+    try {
+      // 1. Fetch Invitations
+      const { data: invitesData, error: invitesError } = await supabase
+        .from("team_invitations")
+        .select("*")
+        .eq("organization_id", user.organizationId)
+        .order("created_at", { ascending: false })
+
+      if (!invitesError && invitesData) {
+        setInvitations(invitesData)
       }
+
+      // 2. Fetch Workspace Members (or fallback to showing just the Admin)
+      const { data: membersData, error: membersError } = await supabase
+        .from("workspace_members")
+        .select("*")
+        .eq("workspace_id", user.organizationId)
+
+      if (!membersError && membersData) {
+        setMembers(membersData)
+      }
+    } catch (e) {
+      console.warn("Failed to fetch settings data from Supabase", e)
+    } finally {
+      setIsLoadingData(false)
     }
-    return {}
-  })
+  }
 
   useEffect(() => {
-    if (organization) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setOrgName(organization.name)
+    if (isLoaded && user) {
+      setOrgName(user.isTeamMember ? "Team Workspace" : `${user.fullName}'s Workspace`)
+      fetchSettingsData()
     }
-  }, [organization])
+  }, [isLoaded, user])
 
   const handleUpdateOrganization = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!organization) return
+    if (!user) return
     if (!orgName.trim()) {
-      toast.error("Organization name cannot be empty")
+      toast.error("Workspace name cannot be empty")
       return
     }
 
     try {
       setIsSavingOrg(true)
-      await organization.update({ name: orgName })
-      toast.success("Organization name updated successfully!")
+      // Since we are using user ID as workspace_id, we can just save the name locally or in a workspace table
+      localStorage.setItem(`projtrack_org_name_${user.organizationId}`, orgName)
+      toast.success("Workspace name updated successfully!")
     } catch {
-      toast.error("Failed to update organization name")
+      toast.error("Failed to update workspace name")
     } finally {
       setIsSavingOrg(false)
     }
@@ -86,7 +120,7 @@ export default function SettingsPage() {
 
   const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!organization) return
+    if (!user) return
     if (!email) {
       toast.error("Please enter an email address")
       return
@@ -94,41 +128,63 @@ export default function SettingsPage() {
 
     try {
       setIsInviting(true)
-      await organization.inviteMember({
-        emailAddress: email,
-        role: role as "org:member" | "org:admin"
-      })
+      
+      // Generate a clean, premium 6-character code (e.g., PT-ABC123)
+      const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase()
+      const generatedCode = `PT-${randomCode}`
 
-      // Save custom title locally
-      const updatedTitles = { ...memberTitles, [email]: customTitle.trim() || "Team Member" }
-      setMemberTitles(updatedTitles)
-      localStorage.setItem("projtrack_member_titles", JSON.stringify(updatedTitles))
+      const { error } = await supabase
+        .from("team_invitations")
+        .insert({
+          email: email.trim().toLowerCase(),
+          code: generatedCode,
+          organization_id: user.organizationId,
+          role: role,
+          custom_title: customTitle.trim() || (role === "DEVELOPER" ? "Developer" : role === "CLIENT" ? "Client" : "Viewer"),
+          created_at: new Date().toISOString()
+        })
 
-      toast.success(`Successfully sent invitation to ${email}!`)
+      if (error) throw error
+
+      toast.success(`Successfully created invitation for ${email}! Code: ${generatedCode}`)
       setIsDialogOpen(false)
       setEmail("")
       setCustomTitle("")
+      
       // Refresh invitation list
-      invitations?.revalidate?.()
-    } catch {
-      toast.error("Failed to send invitation")
+      await fetchSettingsData()
+    } catch (err: any) {
+      console.error(err)
+      toast.error("Failed to send invitation. Make sure the team_invitations table exists.")
     } finally {
       setIsInviting(false)
     }
   }
 
-  const handleRevokeInvitation = async (invite: { id: string; revoke: () => Promise<unknown> }) => {
-    if (!invite) return
+  const handleRevokeInvitation = async (id: string) => {
     try {
-      await invite.revoke()
+      const { error } = await supabase
+        .from("team_invitations")
+        .delete()
+        .eq("id", id)
+
+      if (error) throw error
+      
       toast.success("Invitation revoked successfully")
-      invitations?.revalidate?.()
+      await fetchSettingsData()
     } catch {
       toast.error("Failed to revoke invitation")
     }
   }
 
-  if (!userLoaded || !orgLoaded) {
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text)
+    setCopiedId(id)
+    toast.success("Invite code copied to clipboard!")
+    setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  if (!isLoaded || isLoadingData) {
     return (
       <AppShell>
         <div className="mx-auto max-w-3xl space-y-6">
@@ -161,29 +217,32 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </div>
+      </AppShell>
+    )
+  }
 
-          <Card className="border-0 shadow-card">
-            <CardContent className="p-6 space-y-4">
-              <div className="flex justify-between items-center border-b border-gray-100 pb-4">
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-3.5 w-40" />
-                </div>
-                <Skeleton className="h-9 w-32 rounded-lg" />
+  if (user?.isTeamMember) {
+    return (
+      <AppShell>
+        <div className="mx-auto max-w-3xl space-y-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-navy">Settings</h1>
+              <p className="mt-1 text-sm text-muted-foreground">View your organization settings</p>
+            </div>
+          </div>
+
+          <Card className="border-0 shadow-card bg-slate-50/50">
+            <CardContent className="p-8 flex flex-col items-center justify-center text-center space-y-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50">
+                <AlertCircle className="h-6 w-6 text-amber-600" />
               </div>
-              <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="flex justify-between items-center p-3 border border-gray-100 rounded-xl">
-                    <div className="flex items-center gap-3">
-                      <Skeleton className="h-8 w-8 rounded-full" />
-                      <div className="space-y-1.5">
-                        <Skeleton className="h-4 w-32" />
-                        <Skeleton className="h-3 w-48" />
-                      </div>
-                    </div>
-                    <Skeleton className="h-6 w-24 rounded-full" />
-                  </div>
-                ))}
+              <div className="space-y-1 max-w-sm">
+                <h3 className="text-sm font-bold text-navy">Access Restricted</h3>
+                <p className="text-xs text-muted-foreground">
+                  As a Team Member, you do not have permission to modify organization settings or invite other members.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -198,181 +257,168 @@ export default function SettingsPage() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-navy">Settings</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Manage your organization and team</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground font-medium">Switch Org:</span>
-            <OrganizationSwitcher 
-              afterCreateOrganizationUrl="/settings"
-              afterSelectOrganizationUrl="/settings"
-              appearance={{
-                elements: {
-                  rootBox: "border border-slate-200 rounded-lg p-0.5 bg-white shadow-xs",
-                  organizationSwitcherTrigger: "text-xs font-semibold py-1 px-2.5"
-                }
-              }}
-            />
+            <p className="mt-1 text-sm text-muted-foreground">Manage your workspace and team members</p>
           </div>
         </div>
 
-        {!organization ? (
-          /* Create organization fallback UI */
-          <Card className="border-0 shadow-card bg-slate-50/50">
-            <CardContent className="p-8 flex flex-col items-center justify-center text-center space-y-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50">
-                <AlertCircle className="h-6 w-6 text-amber-600" />
+        {/* Organization details card */}
+        <Card className="border-0 shadow-card">
+          <CardContent className="p-6 space-y-5">
+            <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-navy/5">
+                <Shield className="h-5 w-5 text-navy/60" />
               </div>
-              <div className="space-y-1 max-w-sm">
-                <h3 className="text-sm font-bold text-navy">No Active Organization</h3>
+              <div>
+                <h3 className="text-sm font-bold text-navy">Workspace Details</h3>
+                <p className="text-xs text-muted-foreground">Update your team&apos;s workspace settings</p>
+              </div>
+            </div>
+            <form onSubmit={handleUpdateOrganization} className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-navy/80">Workspace Name</Label>
+                  <Input 
+                    value={orgName} 
+                    onChange={(e) => setOrgName(e.target.value)} 
+                    className="h-9 text-sm border-gray-200 focus-visible:ring-gold/30" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-navy/80">Workspace ID (Supabase)</Label>
+                  <Input 
+                    value={user?.organizationId || ""} 
+                    disabled 
+                    className="h-9 text-sm border-gray-100 bg-slate-50 text-slate-500 font-mono" 
+                  />
+                </div>
+              </div>
+              <Button 
+                type="submit" 
+                disabled={isSavingOrg} 
+                className="bg-navy hover:bg-navy-lighter text-xs font-semibold cursor-pointer"
+              >
+                {isSavingOrg ? "Saving..." : "Save Changes"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        {/* Team members card */}
+        <Card className="border-0 shadow-card">
+          <CardContent className="p-6 space-y-5">
+            <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-sm font-bold text-navy">Team Members</h3>
                 <p className="text-xs text-muted-foreground">
-                  Create or select an organization to invite teammates, manage roles, and collaborate on projects in real-time.
+                  {members.length + 1} active members in this workspace
                 </p>
               </div>
-              <div className="pt-2">
-                <CreateOrganization afterCreateOrganizationUrl="/settings" />
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <>
-            {/* Organization details card */}
-            <Card className="border-0 shadow-card">
-              <CardContent className="p-6 space-y-5">
-                <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-navy/5">
-                    <Shield className="h-5 w-5 text-navy/60" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-navy">Organization Details</h3>
-                    <p className="text-xs text-muted-foreground">Update your team&apos;s workspace settings</p>
-                  </div>
-                </div>
-                <form onSubmit={handleUpdateOrganization} className="space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label className="text-xs font-medium text-navy/80">Organization Name</Label>
-                      <Input 
-                        value={orgName} 
-                        onChange={(e) => setOrgName(e.target.value)} 
-                        className="h-9 text-sm border-gray-200 focus-visible:ring-gold/30" 
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-medium text-navy/80">Active ID (Clerk)</Label>
-                      <Input 
-                        value={organization.id} 
-                        disabled 
-                        className="h-9 text-sm border-gray-100 bg-slate-50 text-slate-500 font-mono" 
-                      />
-                    </div>
-                  </div>
-                  <Button 
-                    type="submit" 
-                    disabled={isSavingOrg} 
-                    className="bg-navy hover:bg-navy-lighter text-xs font-semibold"
-                  >
-                    {isSavingOrg ? "Saving..." : "Save Changes"}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
+              <Button 
+                size="sm" 
+                onClick={() => setIsDialogOpen(true)} 
+                className="bg-gradient-to-r from-gold to-gold-dark text-navy text-xs font-semibold shadow-sm cursor-pointer hover:opacity-90 border-0"
+              >
+                <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                Invite Member
+              </Button>
+            </div>
 
-            {/* Team members card */}
-            <Card className="border-0 shadow-card">
-              <CardContent className="p-6 space-y-5">
-                <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+            {/* Active Members List */}
+            <div className="space-y-2.5">
+              <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Members</h4>
+              
+              {/* Admin (Current User) */}
+              <div className="group flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3 transition-all hover:border-gray-200 hover:shadow-sm">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-8 w-8 ring-2 ring-gray-100">
+                    <AvatarFallback className="text-[10px] font-bold text-white bg-gradient-to-br from-navy to-navy-lighter">
+                      {user?.fullName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) || "AD"}
+                    </AvatarFallback>
+                  </Avatar>
                   <div>
-                    <h3 className="text-sm font-bold text-navy">Team Members</h3>
-                    <p className="text-xs text-muted-foreground">
-                      {memberships?.data?.length || 0} active members across your organization
+                    <p className="text-sm font-semibold text-navy">
+                      {user?.fullName}
+                      <span className="ml-1.5 text-[9px] font-semibold text-gold-dark bg-gold/10 px-1.5 py-0.5 rounded-full border border-gold/20">Owner</span>
                     </p>
+                    <p className="text-xs text-muted-foreground">{user?.email}</p>
                   </div>
-                  <Button 
-                    size="sm" 
-                    onClick={() => setIsDialogOpen(true)} 
-                    className="bg-gradient-to-r from-gold to-gold-dark text-navy text-xs font-semibold shadow-sm cursor-pointer hover:opacity-90"
-                  >
-                    <UserPlus className="mr-1.5 h-3.5 w-3.5" />
-                    Invite Member
-                  </Button>
                 </div>
+                <Badge variant="outline" className="text-[10px] font-semibold tracking-wide px-2.5 py-0.5 capitalize text-gold-dark border-gold/30 bg-gold/5">
+                  <Shield className="mr-1 h-2.5 w-2.5" />
+                  Project Manager (Admin)
+                </Badge>
+              </div>
 
-                {/* Live Active Members List */}
-                <div className="space-y-2.5">
-                  <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Members</h4>
-                  {memberships?.data?.map((m) => {
-                    const pd = m.publicUserData
-                    const initials = pd?.firstName 
-                      ? `${pd.firstName[0]}${pd.lastName?.[0] || ""}`.toUpperCase()
-                      : pd?.identifier?.slice(0, 2).toUpperCase() || ""
-                    const isCurrentUser = pd?.userId === user?.id
+              {/* Joined Members */}
+              {members.map((m) => (
+                <div key={m.id} className="group flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3 transition-all hover:border-gray-200 hover:shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-8 w-8 ring-2 ring-gray-100">
+                      <AvatarFallback className="text-[10px] font-bold text-white bg-gradient-to-br from-navy to-navy-lighter">
+                        {m.email.slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-semibold text-navy">{m.email.split("@")[0]}</p>
+                      <p className="text-xs text-muted-foreground">{m.email}</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] font-semibold tracking-wide px-2.5 py-0.5 capitalize text-navy/60 border-navy/15">
+                    <Shield className="mr-1 h-2.5 w-2.5" />
+                    {m.custom_title || m.role}
+                  </Badge>
+                </div>
+              ))}
+            </div>
 
-                    return (
-                      <div key={m.id} className="group flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3 transition-all hover:border-gray-200 hover:shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-8 w-8 ring-2 ring-gray-100">
-                            {pd?.imageUrl && <AvatarImage src={pd.imageUrl} />}
-                            <AvatarFallback className="text-[10px] font-bold text-white bg-gradient-to-br from-navy to-navy-lighter">
-                              {initials}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="text-sm font-semibold text-navy">
-                              {pd?.firstName ? `${pd.firstName} ${pd.lastName || ""}`.trim() : "Pending Name"}
-                              {isCurrentUser && <span className="ml-1.5 text-[9px] font-semibold text-gold-dark bg-gold/10 px-1.5 py-0.5 rounded-full border border-gold/20">You</span>}
-                            </p>
-                            <p className="text-xs text-muted-foreground">{pd?.identifier}</p>
-                          </div>
-                        </div>
-                        <Badge variant="outline" className={cn(
-                          "text-[10px] font-semibold tracking-wide px-2.5 py-0.5 capitalize",
-                          m.role === "org:admin" ? "text-gold-dark border-gold/30 bg-gold/5" : "text-navy/60 border-navy/15"
-                        )}>
-                          <Shield className="mr-1 h-2.5 w-2.5" />
-                          {(pd?.identifier && memberTitles[pd.identifier]) || (m.role === "org:admin" ? "Project Manager (Admin)" : "Team Member")}
-                        </Badge>
+            {/* Pending Invitations List */}
+            {invitations.length > 0 && (
+              <div className="space-y-2.5 pt-4 border-t border-slate-100">
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pending Invitations</h4>
+                {invitations.map((invite) => (
+                  <div key={invite.id} className="group flex items-center justify-between rounded-xl border border-dashed border-gray-200 px-4 py-3 transition-all hover:bg-slate-50/50">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-400">
+                        ✉
                       </div>
-                    )
-                  })}
-                </div>
-
-                {/* Live Pending Invitations List */}
-                {invitations?.data && invitations.data.length > 0 && (
-                  <div className="space-y-2.5 pt-4 border-t border-slate-100">
-                    <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pending Invitations</h4>
-                    {invitations.data.map((invite) => (
-                      <div key={invite.id} className="group flex items-center justify-between rounded-xl border border-dashed border-gray-200 px-4 py-3 transition-all hover:bg-slate-50/50">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-400">
-                            ✉
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-navy">{invite.emailAddress}</p>
-                            <p className="text-xs text-slate-400">Sent and awaiting acceptance</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <Badge variant="outline" className="text-[10px] text-purple-700 border-purple-200 bg-purple-50 px-2 py-0.5">
-                            Invited as {memberTitles[invite.emailAddress] || (invite.role === "org:admin" ? "Admin" : "Member")}
-                          </Badge>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => handleRevokeInvitation(invite)}
-                            className="h-7 w-7 text-slate-400 hover:text-red-500 rounded-md"
-                            title="Revoke Invitation"
+                      <div>
+                        <p className="text-sm font-semibold text-navy">{invite.email}</p>
+                        <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
+                          Code: <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-navy font-bold text-[10px]">{invite.code}</span>
+                          <button
+                            onClick={() => copyToClipboard(invite.code, invite.id)}
+                            className="p-1 hover:bg-slate-200 rounded text-slate-500 transition-colors cursor-pointer"
+                            title="Copy code"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
+                            {copiedId === invite.id ? (
+                              <Check className="h-3 w-3 text-green-600" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </button>
+                        </p>
                       </div>
-                    ))}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Badge variant="outline" className="text-[10px] text-purple-700 border-purple-200 bg-purple-50 px-2 py-0.5">
+                        Invited as {invite.custom_title || invite.role}
+                      </Badge>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => handleRevokeInvitation(invite.id)}
+                        className="h-7 w-7 text-slate-400 hover:text-red-500 rounded-md cursor-pointer"
+                        title="Revoke Invitation"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </>
-        )}
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Invite Member dialog */}
@@ -383,7 +429,7 @@ export default function SettingsPage() {
               <DialogHeader className="mb-4">
                 <DialogTitle className="text-lg font-bold text-navy">Invite Team Member</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Send an official Clerk organization invite to join your workspace.
+                  Invite a team member to join this workspace. They will log in using their email and the generated invite code.
                 </DialogDescription>
               </DialogHeader>
 
@@ -407,8 +453,9 @@ export default function SettingsPage() {
                     onChange={(e) => setRole(e.target.value)}
                     className="flex h-9 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm shadow-sm transition-colors focus:border-gold/50 focus:outline-none"
                   >
-                    <option value="org:member">Team Member</option>
-                    <option value="org:admin">Project Manager (Admin)</option>
+                    <option value="DEVELOPER">Developer (Can view & update status)</option>
+                    <option value="CLIENT">Client (Can view & update status)</option>
+                    <option value="VIEWER">Viewer (Can only view)</option>
                   </select>
                 </div>
 
@@ -429,16 +476,16 @@ export default function SettingsPage() {
                 type="button"
                 variant="ghost"
                 onClick={() => setIsDialogOpen(false)}
-                className="text-xs hover:bg-gray-100"
+                className="text-xs hover:bg-gray-100 cursor-pointer"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 disabled={isInviting}
-                className="bg-gradient-to-r from-gold to-gold-dark text-navy text-xs font-semibold shadow-sm"
+                className="bg-gradient-to-r from-gold to-gold-dark text-navy text-xs font-semibold shadow-sm border-0 cursor-pointer"
               >
-                {isInviting ? "Sending..." : "Send Invitation"}
+                {isInviting ? "Generating Code..." : "Create Invitation"}
               </Button>
             </DialogFooter>
           </form>

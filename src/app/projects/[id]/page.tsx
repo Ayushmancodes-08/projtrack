@@ -28,7 +28,8 @@ import { GanttChart } from "@/components/gantt/gantt-chart"
 import { SpreadsheetView } from "@/components/spreadsheet/spreadsheet-view"
 import Link from "next/link"
 import { useAppStore } from "@/store/app-store"
-import { useUser, useOrganization } from "@clerk/nextjs"
+import { useAuth } from "@/lib/auth-context"
+import { createClient } from "@/lib/supabase/client"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { toast } from "sonner"
 
@@ -42,16 +43,10 @@ export default function ProjectDetailPage() {
   const projectId = params.id as string
 
   const { projects, tasks: storeTasks, initializeStore, addTask, updateTaskStatus, isLoaded, addNotification, deleteProject } = useAppStore()
-  const { user: clerkUser } = useUser()
-  const { organization: clerkOrg, membership, memberships } = useOrganization({
-    memberships: {
-      pageSize: 50,
-      keepPreviousData: true
-    }
-  })
-
-  const isAdmin = !clerkOrg || membership?.role === "org:admin"
-  const userName = clerkUser?.fullName || clerkUser?.primaryEmailAddress?.emailAddress || "Team Member"
+  const { user } = useAuth()
+  
+  const isAdmin = user ? !user.isTeamMember : false
+  const userName = user?.fullName || user?.email || "Team Member"
 
   const [view, setView] = useState<"kanban" | "gantt" | "spreadsheet">("kanban")
   
@@ -68,10 +63,52 @@ export default function ProjectDetailPage() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([])
+  const [displayTeamCount, setDisplayTeamCount] = useState(1)
+
   useEffect(() => {
-    initializeStore()
+    if (user) {
+      initializeStore(user)
+
+      const fetchTeamMembers = async () => {
+        const supabase = createClient()
+        const membersList: { id: string; name: string }[] = []
+        
+        // Add Admin/Owner
+        const adminInitials = user.fullName 
+          ? user.fullName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) 
+          : "AD"
+        membersList.push({ id: adminInitials, name: user.fullName })
+
+        // Fetch other members
+        const { data: dbMembers } = await supabase
+          .from("workspace_members")
+          .select("*")
+          .eq("workspace_id", user.organizationId)
+        
+        if (dbMembers) {
+          dbMembers.forEach((m) => {
+            const name = m.email.split("@")[0]
+            const initials = name.slice(0, 2).toUpperCase()
+            membersList.push({ id: initials, name })
+          })
+        }
+        
+        // Fetch pending invites
+        const { data: dbInvites } = await supabase
+          .from("team_invitations")
+          .select("*")
+          .eq("organization_id", user.organizationId)
+        
+        const totalCount = membersList.length + (dbInvites?.length || 0)
+        setDisplayTeamCount(totalCount)
+        setTeamMembers(membersList)
+      }
+      
+      fetchTeamMembers()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [user])
 
   const project = projects.find((p) => p.id === projectId)
   
@@ -154,29 +191,6 @@ export default function ProjectDetailPage() {
   const projectTasks = storeTasks[project.id] || []
   const statuses: StatusConfig[] = project.status_config.length > 0 ? project.status_config : template.defaultStatuses
 
-  // Map of active organization members for the assignee select list
-  const teamMembers = (memberships?.data?.map((m) => {
-    const pd = m.publicUserData
-    const name = pd?.firstName 
-      ? `${pd.firstName} ${pd.lastName?.[0] || ""}`.trim()
-      : pd?.identifier || ""
-    const initials = pd?.firstName 
-      ? `${pd.firstName[0]}${pd.lastName?.[0] || ""}`.toUpperCase()
-      : pd?.identifier?.slice(0, 2).toUpperCase() || ""
-    return { id: initials, name }
-  }) || [])
-
-  // Fallback to the current user if not in an organization
-  if (teamMembers.length === 0 && clerkUser) {
-    const name = clerkUser.fullName || clerkUser.primaryEmailAddress?.emailAddress || "Me"
-    const initials = clerkUser.firstName 
-      ? `${clerkUser.firstName[0]}${clerkUser.lastName?.[0] || ""}`.toUpperCase()
-      : name.slice(0, 2).toUpperCase()
-    teamMembers.push({ id: initials, name })
-  }
-
-  const displayTeamCount = clerkOrg ? teamMembers.length : 1
-
   // Group tasks by status for the Kanban board view
   const tasksByStatus: Record<string, { id: string; title: string; priority?: string; assignee?: string; dueDate?: string; comments: number; attachments: number; blocked: boolean }[]> = {}
   statuses.forEach((s) => {
@@ -241,22 +255,8 @@ export default function ProjectDetailPage() {
   const handleDeleteProject = async () => {
     try {
       setIsDeleting(true)
-      
-      // Revoke team-member access by removing non-admin members from the Clerk organization
-      if (clerkOrg && memberships?.data) {
-        for (const mem of memberships.data) {
-          if (mem.role !== "org:admin" && mem.publicUserData?.userId) {
-            try {
-              await clerkOrg.removeMember(mem.publicUserData.userId)
-            } catch (err) {
-              console.warn(`Failed to revoke access for user ${mem.publicUserData.userId}`, err)
-            }
-          }
-        }
-      }
-
       await deleteProject(project.id)
-      toast.success("Project deleted and team-member access revoked successfully")
+      toast.success("Project deleted successfully")
       router.push("/projects")
     } catch {
       toast.error("Failed to delete project")
@@ -287,34 +287,37 @@ export default function ProjectDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* BUG-023 FIXED: Removed broken link to non-existent /projects/{id}/settings */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 border-gray-200 text-xs"
-              onClick={() => router.push("/settings")}
-            >
-              Configure
-            </Button>
-            {isAdmin && (
-              <Button
-                variant="destructive"
-                size="sm"
-                className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white flex items-center gap-1.5"
-                onClick={() => setIsDeleteOpen(true)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete Project
-              </Button>
+            {!user?.isTeamMember && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 border-gray-200 text-xs"
+                  onClick={() => router.push("/settings")}
+                >
+                  Configure
+                </Button>
+                {isAdmin && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white flex items-center gap-1.5 border-0"
+                    onClick={() => setIsDeleteOpen(true)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete Project
+                  </Button>
+                )}
+                <Button 
+                  size="sm" 
+                  onClick={() => { setDefaultStatus("todo"); setIsTaskOpen(true) }}
+                  className="h-8 bg-gradient-to-r from-gold to-gold-dark text-navy text-xs font-semibold shadow-sm cursor-pointer hover:brightness-105 border-0"
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Add Task
+                </Button>
+              </>
             )}
-            <Button 
-              size="sm" 
-              onClick={() => { setDefaultStatus("todo"); setIsTaskOpen(true) }}
-              className="h-8 bg-gradient-to-r from-gold to-gold-dark text-navy text-xs font-semibold shadow-sm cursor-pointer hover:brightness-105"
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Add Task
-            </Button>
           </div>
         </div>
 

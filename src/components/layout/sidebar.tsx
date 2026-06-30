@@ -18,7 +18,7 @@ import {
 } from "lucide-react"
 import { useAppStore } from "@/store/app-store"
 import { Button } from "@/components/ui/button"
-import { useOrganization } from "@clerk/nextjs"
+import { useAuth } from "@/lib/auth-context"
 
 const iconMap: Record<string, React.ElementType> = {
   LayoutDashboard,
@@ -33,8 +33,8 @@ const iconMap: Record<string, React.ElementType> = {
 export function Sidebar() {
   const pathname = usePathname()
   const { sidebarCollapsed, toggleSidebar } = useAppStore()
-  const { organization: clerkOrg, membership } = useOrganization()
-  const isAdmin = !clerkOrg || membership?.role === "org:admin"
+  const { user } = useAuth()
+  const isAdmin = user ? !user.isTeamMember : false
 
   const visibleItems = SIDEBAR_ITEMS.filter((item) => {
     if (isAdmin) return true

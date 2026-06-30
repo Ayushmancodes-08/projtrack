@@ -1,10 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { Bell, Search, ChevronDown } from "lucide-react"
+import { Bell, Search, ChevronDown, User, ShieldAlert, BadgeCheck, XCircle, Info, AlertCircle, Trash2, Key, Mail, Globe } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
@@ -15,27 +16,33 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useClerk, useUser, useOrganization } from "@clerk/nextjs"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet"
+import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 import { useAppStore } from "@/store/app-store"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { Check, Info, AlertCircle, Trash2 } from "lucide-react"
+import { Check } from "lucide-react"
 import { toast } from "sonner"
 import type { AppNotification } from "@/store/app-store"
 
 // BUG-014 FIXED: Removed unused `useAppStore` import
 
 export function TopNav() {
-  const { user: clerkUser } = useUser()
-  const { organization: clerkOrg, membership } = useOrganization()
-  const { signOut, openUserProfile } = useClerk()
+  const { user, signOut } = useAuth()
   const router = useRouter()
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
   
   const { notifications, resolveNotification, updateTaskStatus, projects } = useAppStore()
 
-  const isAdmin = !clerkOrg || membership?.role === "org:admin"
+  const isAdmin = user ? !user.isTeamMember : false
   const unreadNotifications = notifications.filter((n) => !n.resolved)
   const unreadCount = unreadNotifications.length
 
@@ -60,15 +67,21 @@ export function TopNav() {
     }
   }
 
-  const orgRole = membership?.role === "org:admin" 
-    ? "Project Manager (Admin)" 
-    : membership?.role === "org:member" 
-      ? "Team Member" 
-      : "Viewer"
+  const orgRole = user
+    ? user.isTeamMember
+      ? user.role === "DEVELOPER"
+        ? "Developer"
+        : user.role === "CLIENT"
+          ? "Client"
+          : user.role === "VIEWER"
+            ? "Viewer"
+            : "Team Member"
+      : "Project Manager (Admin)"
+    : "Guest"
 
-  const userInitials = clerkUser?.fullName
-    ? clerkUser.fullName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-    : clerkUser?.primaryEmailAddress?.emailAddress?.slice(0, 2).toUpperCase() || "U"
+  const userInitials = user?.fullName
+    ? user.fullName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+    : user?.email?.slice(0, 2).toUpperCase() || "U"
 
   return (
     <header className="flex h-16 items-center gap-4 border-b border-gray-200/80 bg-white/95 px-6 backdrop-blur-sm">
@@ -77,7 +90,7 @@ export function TopNav() {
         onClick={() => router.push("/settings")}
         className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium text-navy/70 transition-colors hover:bg-navy-100"
       >
-        <span>{clerkOrg?.name || "Personal Workspace"}</span>
+        <span>{user?.isTeamMember ? "Team Workspace" : "Personal Workspace"}</span>
         <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
       </button>
 
@@ -178,14 +191,14 @@ export function TopNav() {
       <DropdownMenu>
         <DropdownMenuTrigger className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors data-open:bg-navy-100 cursor-pointer">
           <Avatar className="h-8 w-8 ring-2 ring-gray-100">
-            {clerkUser?.imageUrl && <AvatarImage src={clerkUser.imageUrl} alt={clerkUser.fullName || "Avatar"} />}
+            {user?.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.fullName || "Avatar"} />}
             <AvatarFallback className="bg-gradient-to-br from-gold to-gold-dark text-[10px] font-semibold text-navy">
               {userInitials}
             </AvatarFallback>
           </Avatar>
           <div className="hidden text-left sm:block">
             <p className="text-xs font-medium leading-tight text-navy">
-              {clerkUser?.fullName || clerkUser?.primaryEmailAddress?.emailAddress || "User"}
+              {user?.fullName || user?.email || "User"}
             </p>
             <p className="text-[10px] text-muted-foreground leading-tight">
               {orgRole}
@@ -198,19 +211,20 @@ export function TopNav() {
               My Account
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="my-1" />
-            {/* BUG-021 FIXED: Profile opens Clerk user profile modal; Settings navigates to /settings */}
             <DropdownMenuItem
-              className="rounded-lg text-xs cursor-pointer"
-              onClick={() => openUserProfile()}
+              className="rounded-lg text-xs cursor-pointer font-medium text-navy"
+              onClick={() => setIsProfileOpen(true)}
             >
-              Profile
+              My Profile
             </DropdownMenuItem>
-            <DropdownMenuItem
-              className="rounded-lg text-xs cursor-pointer"
-              onClick={() => router.push("/settings")}
-            >
-              Settings
-            </DropdownMenuItem>
+            {!user?.isTeamMember && (
+              <DropdownMenuItem
+                className="rounded-lg text-xs cursor-pointer"
+                onClick={() => router.push("/settings")}
+              >
+                Settings
+              </DropdownMenuItem>
+            )}
           </DropdownMenuGroup>
           <DropdownMenuSeparator className="my-1" />
           <DropdownMenuItem 
@@ -221,6 +235,147 @@ export function TopNav() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Profile Sidebar (Sheet) */}
+      <Sheet open={isProfileOpen} onOpenChange={setIsProfileOpen}>
+        <SheetContent className="bg-white border-l border-slate-100 p-6 flex flex-col h-full shadow-2xl">
+          <SheetHeader className="pb-6 border-b border-slate-100">
+            <div className="flex items-center gap-4">
+              <Avatar className="h-14 w-14 ring-4 ring-gold/10">
+                {user?.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.fullName} />}
+                <AvatarFallback className="bg-gradient-to-br from-gold to-gold-dark text-lg font-bold text-navy">
+                  {userInitials}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <SheetTitle className="text-base font-bold text-navy leading-snug">
+                  {user?.fullName || "User Profile"}
+                </SheetTitle>
+                <SheetDescription className="text-xs text-muted-foreground font-medium mt-0.5">
+                  {orgRole}
+                </SheetDescription>
+              </div>
+            </div>
+          </SheetHeader>
+
+          <div className="flex-1 py-6 space-y-6 overflow-y-auto">
+            {/* User details section */}
+            <div className="space-y-4">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Account Details</h4>
+              
+              <div className="rounded-xl bg-slate-50 p-4 space-y-3.5 border border-slate-100/50">
+                <div className="flex items-start gap-3">
+                  <Mail className="h-4 w-4 text-navy/60 mt-0.5" />
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-medium">Email Address</p>
+                    <p className="text-xs font-semibold text-navy mt-0.5">{user?.email}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <Globe className="h-4 w-4 text-navy/60 mt-0.5" />
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-medium">Workspace Context</p>
+                    <p className="text-xs font-semibold text-navy mt-0.5">
+                      {user?.isTeamMember ? "Joined Team Workspace" : "Personal Workspace (Owner)"}
+                    </p>
+                  </div>
+                </div>
+
+                {user?.isTeamMember && user.inviteCode && (
+                  <div className="flex items-start gap-3">
+                    <Key className="h-4 w-4 text-navy/60 mt-0.5" />
+                    <div>
+                      <p className="text-[10px] text-muted-foreground font-medium">Active Invite Code</p>
+                      <p className="text-xs font-mono font-bold text-gold-dark mt-0.5">{user.inviteCode}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Permission checklist */}
+            <div className="space-y-4">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Workspace Permissions</h4>
+              
+              <div className="space-y-3">
+                <div className="flex items-start justify-between rounded-lg border border-slate-100 p-2.5 bg-white shadow-xs">
+                  <div className="flex items-start gap-2">
+                    <BadgeCheck className="h-4 w-4 text-green-600 mt-0.5" />
+                    <span className="text-xs font-medium text-navy">View projects & tasks</span>
+                  </div>
+                  <Badge className="bg-green-50 text-green-700 hover:bg-green-50 border-green-100 text-[9px] px-1.5 py-0">Allowed</Badge>
+                </div>
+
+                <div className="flex items-start justify-between rounded-lg border border-slate-100 p-2.5 bg-white shadow-xs">
+                  <div className="flex items-start gap-2">
+                    <BadgeCheck className="h-4 w-4 text-green-600 mt-0.5" />
+                    <span className="text-xs font-medium text-navy">Update project & task status</span>
+                  </div>
+                  <Badge className="bg-green-50 text-green-700 hover:bg-green-50 border-green-100 text-[9px] px-1.5 py-0">Allowed</Badge>
+                </div>
+
+                <div className="flex items-start justify-between rounded-lg border border-slate-100 p-2.5 bg-white shadow-xs">
+                  <div className="flex items-start gap-2">
+                    {user?.isTeamMember ? (
+                      <XCircle className="h-4 w-4 text-red-500 mt-0.5" />
+                    ) : (
+                      <BadgeCheck className="h-4 w-4 text-green-600 mt-0.5" />
+                    )}
+                    <span className="text-xs font-medium text-navy">Create new projects</span>
+                  </div>
+                  <Badge className={cn(
+                    "text-[9px] px-1.5 py-0",
+                    user?.isTeamMember 
+                      ? "bg-red-50 text-red-700 border-red-100" 
+                      : "bg-green-50 text-green-700 border-green-100"
+                  )}>
+                    {user?.isTeamMember ? "Restricted" : "Allowed"}
+                  </Badge>
+                </div>
+
+                <div className="flex items-start justify-between rounded-lg border border-slate-100 p-2.5 bg-white shadow-xs">
+                  <div className="flex items-start gap-2">
+                    {user?.isTeamMember ? (
+                      <XCircle className="h-4 w-4 text-red-500 mt-0.5" />
+                    ) : (
+                      <BadgeCheck className="h-4 w-4 text-green-600 mt-0.5" />
+                    )}
+                    <span className="text-xs font-medium text-navy">Modify workspace settings</span>
+                  </div>
+                  <Badge className={cn(
+                    "text-[9px] px-1.5 py-0",
+                    user?.isTeamMember 
+                      ? "bg-red-50 text-red-700 border-red-100" 
+                      : "bg-green-50 text-green-700 border-green-100"
+                  )}>
+                    {user?.isTeamMember ? "Restricted" : "Allowed"}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-slate-100 flex flex-col gap-2">
+            <Button 
+              variant="outline" 
+              className="w-full text-xs border-slate-200 hover:bg-slate-50 cursor-pointer"
+              onClick={() => setIsProfileOpen(false)}
+            >
+              Close
+            </Button>
+            <Button 
+              onClick={() => {
+                setIsProfileOpen(false)
+                signOut()
+              }}
+              className="w-full text-xs bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 cursor-pointer shadow-none"
+            >
+              Sign Out
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </header>
   )
 }

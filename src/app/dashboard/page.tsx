@@ -17,16 +17,20 @@ import { getTemplate } from "@/lib/templates"
 import { useAppStore } from "@/store/app-store"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { useAuth } from "@/lib/auth-context"
 
 import { Skeleton } from "@/components/ui/skeleton"
 
 export default function DashboardPage() {
+  const { user } = useAuth()
   const { projects, tasks, initializeStore, isLoaded } = useAppStore()
 
   useEffect(() => {
-    initializeStore()
+    if (user) {
+      initializeStore(user)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [user])
 
   if (!isLoaded) {
     return (

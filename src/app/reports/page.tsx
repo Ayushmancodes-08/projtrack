@@ -10,15 +10,19 @@ import { Download, CheckCircle, AlertTriangle, DollarSign, FolderOpen } from "lu
 import { useAppStore } from "@/store/app-store"
 import { Skeleton } from "@/components/ui/skeleton"
 import Link from "next/link"
+import { useAuth } from "@/lib/auth-context"
 
 export default function ReportsPage() {
+  const { user } = useAuth()
   const { projects, tasks: storeTasks, initializeStore, isLoaded } = useAppStore()
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
 
   useEffect(() => {
-    initializeStore()
+    if (user) {
+      initializeStore(user)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [user])
 
   // Set default selected project when loaded
   useEffect(() => {

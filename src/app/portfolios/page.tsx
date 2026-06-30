@@ -11,6 +11,7 @@ import { toast } from "sonner"
 import { useAppStore } from "@/store/app-store"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { ProjectType } from "@/lib/types"
+import { useAuth } from "@/lib/auth-context"
 
 const portfolioMeta: Record<ProjectType, { name: string; description: string; color: string }> = {
   SOFTWARE: { name: "Engineering & IT", description: "Software development, infrastructure, and tech platform projects", color: "blue" },
@@ -40,12 +41,15 @@ const iconColorMap: Record<string, string> = {
 }
 
 export default function PortfoliosPage() {
+  const { user } = useAuth()
   const { projects, tasks, initializeStore, isLoaded } = useAppStore()
 
   useEffect(() => {
-    initializeStore()
+    if (user) {
+      initializeStore(user)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [user])
 
   if (!isLoaded) {
     return (

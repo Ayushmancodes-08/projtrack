@@ -20,10 +20,12 @@ type AppState = {
   notifications: AppNotification[]
   sidebarCollapsed: boolean
   isLoaded: boolean
+  user: any | null
   
   // Actions
+  setUser: (user: any) => void
   toggleSidebar: () => void
-  initializeStore: () => Promise<void>
+  initializeStore: (user?: any) => Promise<void>
   addProject: (name: string, type: ProjectType, statuses: StatusConfig[], description?: string, deadline?: string) => Promise<Project>
   deleteProject: (projectId: string) => Promise<void>
   addTask: (projectId: string, title: string, priority: Priority, assignee: string, dueDate: string, blocked: boolean, status?: string) => Promise<Task>
@@ -55,16 +57,23 @@ export const useAppStore = create<AppState>((set, get) => ({
   notifications: [],
   sidebarCollapsed: false,
   isLoaded: false,
+  user: null,
 
+  setUser: (user) => set({ user }),
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 
-  initializeStore: async () => {
+  initializeStore: async (user?: any) => {
     if (typeof window === "undefined") return
+    if (user) {
+      set({ user })
+    }
+    const currentUser = user || get().user
+    const workspaceId = currentUser?.organizationId || "personal"
 
     // 1. Load from LocalStorage for instant load / best UX
-    const localProjects = localStorage.getItem("projtrack_projects")
-    const localTasks = localStorage.getItem("projtrack_tasks")
-    const localNotifications = localStorage.getItem("projtrack_notifications")
+    const localProjects = localStorage.getItem(`projtrack_projects_${workspaceId}`)
+    const localTasks = localStorage.getItem(`projtrack_tasks_${workspaceId}`)
+    const localNotifications = localStorage.getItem(`projtrack_notifications_${workspaceId}`)
 
     const projects: Project[] = localProjects ? JSON.parse(localProjects) : []
     const tasks: Record<string, Task[]> = localTasks ? JSON.parse(localTasks) : {}
@@ -80,6 +89,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const { data: dbProjects, error: projError } = await supabase
         .from("projects")
         .select("*")
+        .eq("workspace_id", workspaceId)
       
       if (!projError && dbProjects) {
         // Map DB projects to frontend Projects structure
@@ -106,74 +116,74 @@ export const useAppStore = create<AppState>((set, get) => ({
         })
 
         // Fetch tasks
-        const { data: dbTasks, error: taskError } = await supabase
-          .from("tasks")
-          .select("*")
-
-        if (!taskError && dbTasks) {
-          const syncedTasks: Record<string, Task[]> = {}
-          const projectIds = new Set(syncedProjects.map((p) => p.id))
-          
-          // BUG-055: Only load tasks for projects that actually exist
-          dbTasks.forEach((t: SupabaseTaskRow) => {
-            const projectId = t.project_id as string
-            const taskId = t.id as string
-            
-            if (!projectIds.has(projectId)) {
-              return // Skip tasks for deleted projects
-            }
-            
-            if (!syncedTasks[projectId]) {
-              syncedTasks[projectId] = []
-            }
-            
-            const matchedLocal = (tasks[projectId] || []).find((lt) => lt.id === taskId)
-            syncedTasks[projectId].push({
-              id: taskId,
-              milestone_id: null,
-              project_id: projectId,
-              title: t.title as string,
-              description: (t.description as string) || "",
-              status: t.status as string,
-              priority: (t.priority as Priority) || "MEDIUM",
-              assignee_id: (t.assignee_id as string) || matchedLocal?.assignee_id || null,
-              due_date: t.due_date ? new Date(t.due_date as string | number | Date).toLocaleDateString() : matchedLocal?.due_date || null,
-              estimated_hours: t.estimate_minutes ? Math.round((t.estimate_minutes as number) / 60) : null,
-              actual_hours: null,
-              blocked_reason: t.description && (t.description as string).startsWith("BLOCKED:") ? (t.description as string) : null,
-              is_critical_path: false,
-              sort_order: 0,
-              created_at: t.created_at as string,
-              updated_at: t.updated_at as string
-            })
-          })
-
-          // Fetch notifications
-          const { data: dbNotifications, error: notifError } = await supabase
-            .from("notifications_queue")
+        const projectIds = dbProjects.map((p) => p.id)
+        let dbTasks: any[] = []
+        if (projectIds.length > 0) {
+          const { data, error: taskError } = await supabase
+            .from("tasks")
             .select("*")
-            .order("created_at", { ascending: false })
-
-          let syncedNotifications = notifications
-          if (!notifError && dbNotifications) {
-            syncedNotifications = dbNotifications.map((n: Record<string, any>) => ({
-              id: n.id,
-              title: n.title,
-              body: n.body,
-              type: n.data?.type || "info",
-              task_id: n.data?.task_id || "",
-              project_id: n.data?.project_id || "",
-              user_name: n.data?.user_name || "System",
-              timestamp: n.data?.timestamp || new Date(n.created_at).toLocaleString(),
-              resolved: n.read
-            }))
+            .in("project_id", projectIds)
+          if (!taskError && data) {
+            dbTasks = data
           }
-
-          set({ projects: syncedProjects, tasks: syncedTasks, notifications: syncedNotifications })
-          localStorage.setItem("projtrack_projects", JSON.stringify(syncedProjects))
-          localStorage.setItem("projtrack_tasks", JSON.stringify(syncedTasks))
-          localStorage.setItem("projtrack_notifications", JSON.stringify(syncedNotifications))
         }
+
+        const syncedTasks: Record<string, Task[]> = {}
+        
+        dbTasks.forEach((t: SupabaseTaskRow) => {
+          const projectId = t.project_id as string
+          const taskId = t.id as string
+          
+          if (!syncedTasks[projectId]) {
+            syncedTasks[projectId] = []
+          }
+          
+          const matchedLocal = (tasks[projectId] || []).find((lt) => lt.id === taskId)
+          syncedTasks[projectId].push({
+            id: taskId,
+            milestone_id: null,
+            project_id: projectId,
+            title: t.title as string,
+            description: (t.description as string) || "",
+            status: t.status as string,
+            priority: (t.priority as Priority) || "MEDIUM",
+            assignee_id: (t.assignee_id as string) || matchedLocal?.assignee_id || null,
+            due_date: t.due_date ? new Date(t.due_date as string | number | Date).toLocaleDateString() : matchedLocal?.due_date || null,
+            estimated_hours: t.estimate_minutes ? Math.round((t.estimate_minutes as number) / 60) : null,
+            actual_hours: null,
+            blocked_reason: t.description && (t.description as string).startsWith("BLOCKED:") ? (t.description as string) : null,
+            is_critical_path: false,
+            sort_order: 0,
+            created_at: t.created_at as string,
+            updated_at: t.updated_at as string
+          })
+        })
+
+        // Fetch notifications
+        const { data: dbNotifications, error: notifError } = await supabase
+          .from("notifications_queue")
+          .select("*")
+          .order("created_at", { ascending: false })
+
+        let syncedNotifications = notifications
+        if (!notifError && dbNotifications) {
+          syncedNotifications = dbNotifications.map((n: Record<string, any>) => ({
+            id: n.id,
+            title: n.title,
+            body: n.body,
+            type: n.data?.type || "info",
+            task_id: n.data?.task_id || "",
+            project_id: n.data?.project_id || "",
+            user_name: n.data?.user_name || "System",
+            timestamp: n.data?.timestamp || new Date(n.created_at).toLocaleString(),
+            resolved: n.read
+          }))
+        }
+
+        set({ projects: syncedProjects, tasks: syncedTasks, notifications: syncedNotifications })
+        localStorage.setItem(`projtrack_projects_${workspaceId}`, JSON.stringify(syncedProjects))
+        localStorage.setItem(`projtrack_tasks_${workspaceId}`, JSON.stringify(syncedTasks))
+        localStorage.setItem(`projtrack_notifications_${workspaceId}`, JSON.stringify(syncedNotifications))
       }
     } catch (e) {
       console.warn("Supabase fetch failed, running in offline/LocalStorage mode", e)
@@ -183,10 +193,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   // BUG-025 FIXED: Accept description param and set it on newProject
   // BUG-026 FIXED: Accept deadline param so user can set a real deadline
   addProject: async (name: string, type: ProjectType, statuses: StatusConfig[], description?: string, deadline?: string) => {
+    const currentUser = get().user
+    if (currentUser?.isTeamMember) {
+      throw new Error("Team members cannot create projects.")
+    }
+    const workspaceId = currentUser?.organizationId || "personal"
+
     const newProject: Project = {
       id: generateUUID(),
       portfolio_id: null,
-      organization_id: "personal",
+      organization_id: workspaceId,
       name,
       description: description || "",
       project_type: type,
@@ -207,14 +223,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     // Instant local save
     set({ projects: updatedProjects, tasks: updatedTasks })
-    localStorage.setItem("projtrack_projects", JSON.stringify(updatedProjects))
-    localStorage.setItem("projtrack_tasks", JSON.stringify(updatedTasks))
+    localStorage.setItem(`projtrack_projects_${workspaceId}`, JSON.stringify(updatedProjects))
+    localStorage.setItem(`projtrack_tasks_${workspaceId}`, JSON.stringify(updatedTasks))
 
     // Background Supabase upsert
     try {
       const supabase = createClient()
       await supabase.from("projects").upsert({
         id: newProject.id,
+        workspace_id: workspaceId,
         name: newProject.name,
         color: newProject.health_status,
         status: newProject.project_type
@@ -227,14 +244,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   deleteProject: async (projectId: string) => {
+    const currentUser = get().user
+    if (currentUser?.isTeamMember) {
+      throw new Error("Team members cannot delete projects.")
+    }
+    const workspaceId = currentUser?.organizationId || "personal"
+
     const projectToDelete = get().projects.find((p) => p.id === projectId)
     const updatedProjects = get().projects.filter((p) => p.id !== projectId)
     const updatedTasks = { ...get().tasks }
     delete updatedTasks[projectId]
 
     set({ projects: updatedProjects, tasks: updatedTasks })
-    localStorage.setItem("projtrack_projects", JSON.stringify(updatedProjects))
-    localStorage.setItem("projtrack_tasks", JSON.stringify(updatedTasks))
+    localStorage.setItem(`projtrack_projects_${workspaceId}`, JSON.stringify(updatedProjects))
+    localStorage.setItem(`projtrack_tasks_${workspaceId}`, JSON.stringify(updatedTasks))
 
     try {
       const supabase = createClient()
@@ -251,6 +274,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // BUG-024: Accept optional status param so tasks created from column "+" go to the right column
   addTask: async (projectId: string, title: string, priority: Priority, assignee: string, dueDate: string, blocked: boolean, status = "todo") => {
+    const currentUser = get().user
+    if (currentUser?.isTeamMember) {
+      throw new Error("Team members cannot create tasks.")
+    }
+    const workspaceId = currentUser?.organizationId || "personal"
+
     const newTask: Task = {
       id: generateUUID(),
       milestone_id: null,
@@ -277,7 +306,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     set({ tasks: updatedTasks })
-    localStorage.setItem("projtrack_tasks", JSON.stringify(updatedTasks))
+    localStorage.setItem(`projtrack_tasks_${workspaceId}`, JSON.stringify(updatedTasks))
 
     try {
       const supabase = createClient()

@@ -9,7 +9,7 @@ import { Lock, ArrowRight, AlertCircle, FolderOpen } from "lucide-react"
 import { useAppStore } from "@/store/app-store"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent } from "@/components/ui/card"
-import { useUser, useOrganization } from "@clerk/nextjs"
+import { useAuth } from "@/lib/auth-context"
 
 type AuditEntry = {
   timestamp: string
@@ -29,19 +29,20 @@ const actionColors: Record<string, string> = {
 
 export default function AuditLedgerPage() {
   const { projects, tasks, initializeStore, isLoaded } = useAppStore()
-  const { user: clerkUser } = useUser()
-  const { organization: clerkOrg, membership } = useOrganization()
+  const { user } = useAuth()
   
-  const isAdmin = !clerkOrg || membership?.role === "org:admin"
+  const isAdmin = user ? !user.isTeamMember : false
   const userRole = isAdmin ? "Program Manager" : "Team Member"
-  const selfInitials = clerkUser?.firstName 
-    ? `${clerkUser.firstName[0]}${clerkUser.lastName?.[0] || ""}`.toUpperCase()
+  const selfInitials = user?.fullName 
+    ? user.fullName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
     : "YO"
 
   useEffect(() => {
-    initializeStore()
+    if (user) {
+      initializeStore(user)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [user])
 
   if (!isLoaded) {
     return (

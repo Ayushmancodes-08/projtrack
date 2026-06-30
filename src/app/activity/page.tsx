@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { Filter, AlertCircle } from "lucide-react"
 import { useAppStore } from "@/store/app-store"
-import { useUser, useOrganization } from "@clerk/nextjs"
+import { useAuth } from "@/lib/auth-context"
 
 // BUG-010 FIXED: Build activity from actual store data (tasks created)
 // Note: Deep real-time activity logging requires Supabase triggers.
@@ -41,12 +41,11 @@ export default function ActivityFeedPage() {
   const { tasks: storeTasks, projects } = useAppStore()
   const [activeFilter, setActiveFilter] = useState<FilterTab>("All Activity")
   
-  const { user: clerkUser } = useUser()
-  const { organization: clerkOrg, membership } = useOrganization()
-  const isAdmin = !clerkOrg || membership?.role === "org:admin"
+  const { user } = useAuth()
+  const isAdmin = user ? !user.isTeamMember : false
   const userRole = isAdmin ? "Program Manager" : "Team Member"
-  const selfInitials = clerkUser?.firstName 
-    ? `${clerkUser.firstName[0]}${clerkUser.lastName?.[0] || ""}`.toUpperCase()
+  const selfInitials = user?.fullName 
+    ? user.fullName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
     : "YO"
 
   // BUG-010 FIXED: Derive activity items from real store data
