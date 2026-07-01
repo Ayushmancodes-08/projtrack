@@ -291,6 +291,37 @@ export const useAppStore = create<AppState>((set, get) => ({
           }
         }
 
+        // Auto-sync recovery: If local tasks exist but DB tasks are empty, sync them to Supabase
+        const hasLocalTasks = Object.values(tasks).some(t => t && t.length > 0)
+        if (dbTasks.length === 0 && hasLocalTasks) {
+          try {
+            for (const projectId of Object.keys(tasks)) {
+              for (const task of tasks[projectId]) {
+                await supabase.from("tasks").upsert({
+                  id: task.id,
+                  project_id: task.project_id,
+                  title: task.title,
+                  description: task.description || "",
+                  status: task.status,
+                  priority: task.priority,
+                  due_date: task.due_date ? new Date(task.due_date).toISOString() : null,
+                  assignee_id: task.assignee_id || null
+                })
+              }
+            }
+            // Re-fetch tasks after sync
+            const { data: reFetchedTasks } = await supabase
+              .from("tasks")
+              .select("*")
+              .in("project_id", projectIds)
+            if (reFetchedTasks) {
+              dbTasks = reFetchedTasks
+            }
+          } catch (syncErr) {
+            console.error("Auto-sync local tasks to Supabase failed:", syncErr)
+          }
+        }
+
         const syncedTasks: Record<string, Task[]> = {}
         
         dbTasks.forEach((t: SupabaseTaskRow) => {
@@ -743,7 +774,8 @@ export const useAppStore = create<AppState>((set, get) => ({
             description: task.description || "",
             status: task.status,
             priority: task.priority,
-            due_date: task.due_date ? new Date(task.due_date).toISOString() : null
+            due_date: task.due_date ? new Date(task.due_date).toISOString() : null,
+            assignee_id: task.assignee_id || null
           })
         }
       }
