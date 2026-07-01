@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { AlertCircle, Plus, MessageSquare, Paperclip, Eye, HelpCircle } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -63,7 +63,7 @@ const borderColorMap: Record<string, string> = {
 }
 
 const columnColorAccentMap: Record<string, string> = {
-  slate: "bg-slate-50 border-slate-200",
+  slate: "bg-slate-55 border-slate-200",
   blue: "bg-blue-50/20 border-blue-200",
   amber: "bg-amber-50/20 border-amber-200",
   green: "bg-green-50/30 border-green-200",
@@ -88,13 +88,11 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
 
   const [localTasks, setLocalTasks] = useState(tasks)
 
-  // Keep local state in sync when prop changes (e.g. new task added from dialog)
-  // We do this by detecting prop changes via a derived key
-  const propKey = JSON.stringify(Object.keys(tasks).map(k => tasks[k].length))
-  const localKey = JSON.stringify(Object.keys(localTasks).map(k => localTasks[k].length))
-  if (propKey !== localKey) {
+  // Keep local state in sync when prop changes (e.g. new task added from dialog or updated via realtime)
+  const tasksStr = JSON.stringify(tasks)
+  useEffect(() => {
     setLocalTasks(tasks)
-  }
+  }, [tasksStr])
 
   // Interactive Kanban visual overlays states matching the diagram legend
   const [showVisualSignals, setShowVisualSignals] = useState(true)
@@ -117,11 +115,13 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
     const sourceCol = source.droppableId
     const destCol = destination.droppableId
 
-    // Restrict task dragging so only the assigned user of a task can move it (admins/others cannot drag it)
+    // Restrict task dragging so only the assigned user of a task can move it (admins/others cannot drag it) unless they are admin
     const taskToMove = (localTasks[sourceCol] || [])[source.index]
-    if (!taskToMove || !taskToMove.assignee || taskToMove.assignee.trim().toLowerCase() !== userEmail.trim().toLowerCase()) {
-      toast.error("Only the assigned user can move this task.")
-      return
+    if (!isAdmin) {
+      if (!taskToMove || !taskToMove.assignee || taskToMove.assignee.trim().toLowerCase() !== userEmail.trim().toLowerCase()) {
+        toast.error("Only the assigned user can move this task.")
+        return
+      }
     }
 
     if (sourceCol === destCol) {

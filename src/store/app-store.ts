@@ -979,14 +979,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       resolved: false
     }
 
+    const currentUser = get().user
+    const workspaceId = currentUser?.organizationId || "personal"
+    const project = get().projects.find(p => p.id === project_id)
+    const recipientUserId = project?.organization_id || currentUser?.organizationId || currentUser?.id || null
+
     const updatedNotifications = [newNotification, ...get().notifications]
     set({ notifications: updatedNotifications })
-    localStorage.setItem("projtrack_notifications", JSON.stringify(updatedNotifications))
+    localStorage.setItem(`projtrack_notifications_${workspaceId}`, JSON.stringify(updatedNotifications))
 
     try {
       const supabase = createClient()
       await supabase.from("notifications_queue").insert({
         id: newNotification.id,
+        user_id: recipientUserId,
         title: newNotification.title,
         body: newNotification.body,
         read: false,
@@ -1008,7 +1014,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       n.id === notificationId ? { ...n, resolved: true } : n
     )
     set({ notifications: updatedNotifications })
-    localStorage.setItem("projtrack_notifications", JSON.stringify(updatedNotifications))
+    const currentUser = get().user
+    const workspaceId = currentUser?.organizationId || "personal"
+    localStorage.setItem(`projtrack_notifications_${workspaceId}`, JSON.stringify(updatedNotifications))
 
     try {
       const supabase = createClient()
