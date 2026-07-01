@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     const resend = new Resend(apiKey)
 
     const { data, error } = await resend.emails.send({
-      from: "projectBeacon <onboarding@resend.dev>",
+      from: "onboarding@resend.dev",
       to: [email],
       subject: `Invite to join ${organizationName || "projectBeacon"} Workspace`,
       html: htmlContent,

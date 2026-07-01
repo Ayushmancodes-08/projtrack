@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { UserPlus, Shield, AlertCircle, Trash2, Copy, Check } from "lucide-react"
+import { UserPlus, Shield, AlertCircle, Trash2, Copy, Check, Eye, EyeOff } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -31,6 +31,7 @@ type Invitation = {
   role: string
   custom_title: string
   created_at: string
+  accepted: boolean
 }
 
 type WorkspaceMember = {
@@ -55,6 +56,7 @@ export default function SettingsPage() {
   const [isSavingOrg, setIsSavingOrg] = useState(false)
   const [isInviting, setIsInviting] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [visibleInviteIds, setVisibleInviteIds] = useState<Record<string, boolean>>({})
   
   const [invitations, setInvitations] = useState<Invitation[]>([])
   const [members, setMembers] = useState<WorkspaceMember[]>([])
@@ -69,7 +71,6 @@ export default function SettingsPage() {
         .from("team_invitations")
         .select("*")
         .eq("organization_id", user.organizationId)
-        .eq("accepted", false)
         .order("created_at", { ascending: false })
 
       if (!invitesError && invitesData) {
@@ -433,50 +434,77 @@ export default function SettingsPage() {
               ))}
             </div>
 
-            {/* Pending Invitations List */}
+            {/* Invitations List */}
             {invitations.length > 0 && (
               <div className="space-y-2.5 pt-4 border-t border-slate-100">
-                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pending Invitations</h4>
-                {invitations.map((invite) => (
-                  <div key={invite.id} className="group flex items-center justify-between rounded-xl border border-dashed border-gray-200 px-4 py-3 transition-all hover:bg-slate-50/50">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-400">
-                        ✉
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Invitations</h4>
+                {invitations.map((invite) => {
+                  const isVisible = !!visibleInviteIds[invite.id]
+                  const maskedCode = invite.code.replace(/^(PT-)?(.*)$/, (_, prefix, suffix) => {
+                    const pref = prefix || ""
+                    return pref + "•".repeat(suffix.length)
+                  })
+                  return (
+                    <div key={invite.id} className="group flex items-center justify-between rounded-xl border border-dashed border-gray-200 px-4 py-3 transition-all hover:bg-slate-50/50">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-400">
+                          ✉
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-navy">{invite.email}</p>
+                          <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
+                            Code: <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-navy font-bold text-[10px]">{isVisible ? invite.code : maskedCode}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setVisibleInviteIds(prev => ({ ...prev, [invite.id]: !prev[invite.id] }))
+                              }}
+                              className="p-1 hover:bg-slate-200 rounded text-slate-500 transition-colors cursor-pointer"
+                              title={isVisible ? "Hide code" : "Show code"}
+                            >
+                              {isVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(invite.code, invite.id)}
+                              className="p-1 hover:bg-slate-200 rounded text-slate-500 transition-colors cursor-pointer"
+                              title="Copy code"
+                            >
+                              {copiedId === invite.id ? (
+                                <Check className="h-3 w-3 text-green-600" />
+                              ) : (
+                                <Copy className="h-3 w-3" />
+                              )}
+                            </button>
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-navy">{invite.email}</p>
-                        <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-                          Code: <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-navy font-bold text-[10px]">{invite.code}</span>
-                          <button
-                            onClick={() => copyToClipboard(invite.code, invite.id)}
-                            className="p-1 hover:bg-slate-200 rounded text-slate-500 transition-colors cursor-pointer"
-                            title="Copy code"
-                          >
-                            {copiedId === invite.id ? (
-                              <Check className="h-3 w-3 text-green-600" />
-                            ) : (
-                              <Copy className="h-3 w-3" />
-                            )}
-                          </button>
-                        </p>
+                      <div className="flex items-center gap-3">
+                        {invite.accepted ? (
+                          <Badge variant="outline" className="text-[10px] text-green-700 border-green-200 bg-green-50 px-2 py-0.5 font-semibold">
+                            Accepted
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] text-amber-700 border-amber-200 bg-amber-50 px-2 py-0.5 font-semibold">
+                            Pending
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="text-[10px] text-purple-700 border-purple-200 bg-purple-50 px-2 py-0.5">
+                          Invited as {invite.custom_title || invite.role}
+                        </Badge>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleRevokeInvitation(invite.id)}
+                          className="h-7 w-7 text-slate-400 hover:text-red-500 rounded-md cursor-pointer"
+                          title="Revoke Invitation"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline" className="text-[10px] text-purple-700 border-purple-200 bg-purple-50 px-2 py-0.5">
-                        Invited as {invite.custom_title || invite.role}
-                      </Badge>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => handleRevokeInvitation(invite.id)}
-                        className="h-7 w-7 text-slate-400 hover:text-red-500 rounded-md cursor-pointer"
-                        title="Revoke Invitation"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </CardContent>
