@@ -130,22 +130,51 @@ export default function SettingsPage() {
     try {
       setIsInviting(true)
       
-      // Generate a clean, premium 6-character code (e.g., PT-ABC123)
-      const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase()
-      const generatedCode = `PT-${randomCode}`
+      const targetEmail = email.trim().toLowerCase()
 
-      const { error } = await supabase
+      // Check if an invitation already exists for this email IN THIS workspace only
+      // (filter by organization_id to avoid picking up codes from other workspaces)
+      const { data: existingInvite } = await supabase
         .from("team_invitations")
-        .insert({
-          email: email.trim().toLowerCase(),
-          code: generatedCode,
-          organization_id: user.organizationId,
-          role: role,
-          custom_title: customTitle.trim() || (role === "DEVELOPER" ? "Developer" : role === "CLIENT" ? "Client" : "Viewer"),
-          created_at: new Date().toISOString()
-        })
+        .select("*")
+        .eq("email", targetEmail)
+        .eq("organization_id", user.organizationId)
+        .maybeSingle()
 
-      if (error) throw error
+      let generatedCode = ""
+      if (existingInvite) {
+        // Reuse the SAME code — never generate a new one for an existing member/invitee
+        generatedCode = existingInvite.code
+        // Update role/title and mark as pending again if re-inviting
+        const { error } = await supabase
+          .from("team_invitations")
+          .update({
+            role: role,
+            custom_title: customTitle.trim() || (role === "DEVELOPER" ? "Developer" : role === "CLIENT" ? "Client" : "Viewer"),
+            accepted: false,
+            created_at: new Date().toISOString()
+          })
+          .eq("id", existingInvite.id)
+        if (error) throw error
+      } else {
+        // First-time invite for this email in this workspace — generate ONE code
+        const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase()
+        generatedCode = `PT-${randomCode}`
+
+        const { error } = await supabase
+          .from("team_invitations")
+          .insert({
+            email: targetEmail,
+            code: generatedCode,
+            organization_id: user.organizationId,
+            role: role,
+            custom_title: customTitle.trim() || (role === "DEVELOPER" ? "Developer" : role === "CLIENT" ? "Client" : "Viewer"),
+            created_at: new Date().toISOString(),
+            accepted: false
+          })
+
+        if (error) throw error
+      }
 
       // Send the invitation details to the person's email
       try {

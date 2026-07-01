@@ -62,7 +62,7 @@ export default function LoginPage() {
         <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-gold to-gold-dark shadow-lg shadow-gold/20 transform transition-transform hover:scale-105 duration-300">
           <Shield className="h-7 w-7 text-navy" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-white">ProjTrack</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-white">projectBeacon</h1>
         <p className="mt-1 text-xs text-white/50 font-medium tracking-wide uppercase">
           Autonomous Project Intelligence
         </p>

@@ -25,7 +25,7 @@ export async function POST(request: Request) {
           Hello,
         </p>
         <p style="color: #475569; font-size: 16px; line-height: 24px;">
-          <strong>${invitedBy || "An administrator"}</strong> has invited you to join the workspace <strong>${organizationName || "ProjTrack"}</strong> as a <strong>${customTitle || formattedRole}</strong>.
+          <strong>${invitedBy || "An administrator"}</strong> has invited you to join the workspace <strong>${organizationName || "projectBeacon"}</strong> as a <strong>${customTitle || formattedRole}</strong>.
         </p>
         
         <div style="background-color: #F8FAFC; border: 1px dashed #CBD5E1; padding: 20px; border-radius: 8px; margin: 24px 0; text-align: center;">
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
         <p style="color: #475569; font-size: 14px; line-height: 20px;">
           To accept this invitation:
           <ol style="padding-left: 20px; margin-top: 8px;">
-            <li>Go to the ProjTrack login page.</li>
+            <li>Go to the projectBeacon login page.</li>
             <li>Select "Log in as Team Member".</li>
             <li>Enter your email address: <strong>${email}</strong> and the code above.</li>
           </ol>
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
         <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 32px 0;" />
         <p style="color: #94A3B8; font-size: 12px; text-align: center; margin: 0;">
-          This is an automated message from ProjTrack. If you were not expecting this invite, please ignore this email.
+          This is an automated message from projectBeacon. If you were not expecting this invite, please ignore this email.
         </p>
       </div>
     `
@@ -67,9 +67,9 @@ export async function POST(request: Request) {
     const resend = new Resend(apiKey)
 
     const { data, error } = await resend.emails.send({
-      from: "ProjTrack <onboarding@resend.dev>",
+      from: "projectBeacon <onboarding@resend.dev>",
       to: [email],
-      subject: `Invite to join ${organizationName || "ProjTrack"} Workspace`,
+      subject: `Invite to join ${organizationName || "projectBeacon"} Workspace`,
       html: htmlContent,
     })
 
@@ -85,3 +85,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
+

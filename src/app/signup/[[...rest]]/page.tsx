@@ -137,7 +137,7 @@ export default function SignupPage() {
       </div>
 
       <p className="relative z-10 mt-8 text-[10px] text-white/20 font-medium tracking-wider uppercase">
-        &copy; {new Date().getFullYear()} ProjTrack. All rights reserved.
+        &copy; {new Date().getFullYear()} projectBeacon. All rights reserved.
       </p>
     </div>
   )

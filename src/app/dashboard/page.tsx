@@ -165,7 +165,7 @@ export default function DashboardPage() {
                 <FolderOpen className="h-6 w-6 text-navy/60" />
               </div>
               <div className="space-y-1.5 max-w-sm">
-                <h3 className="text-sm font-bold text-navy">Welcome to ProjTrack!</h3>
+                <h3 className="text-sm font-bold text-navy">Welcome to projectBeacon!</h3>
                 <p className="text-xs text-muted-foreground">
                   Your workspace is currently empty. Create a new project to start tracking stages, visual signals, and team progress.
                 </p>
@@ -233,3 +233,4 @@ export default function DashboardPage() {
     </AppShell>
   )
 }
+

@@ -60,16 +60,16 @@ export default function LandingPage() {
 
   const faqs = [
     {
-      q: "What makes ProjTrack different from other project management tools?",
-      a: "ProjTrack combines traditional agile tools (like Kanban boards and spreadsheets) with autonomous project intelligence—meaning we automate status reporting, analyze project health, and keep compliance-ready audit logs automatically."
+      q: "What makes projectBeacon different from other project management tools?",
+      a: "projectBeacon combines traditional agile tools (like Kanban boards and spreadsheets) with autonomous project intelligence—meaning we automate status reporting, analyze project health, and keep compliance-ready audit logs automatically."
     },
     {
       q: "Can I switch between Kanban and Spreadsheet views?",
       a: "Yes! Every project can be viewed as a visual Kanban board, a high-performance spreadsheet, or a detailed report stream. Your data is synced instantly across all views."
     },
     {
-      q: "Is ProjTrack secure and compliant?",
-      a: "Absolutely. With built-in Clerk authentication, enterprise-grade role-based access control, and comprehensive system audit logs, ProjTrack is built for security-conscious teams."
+      q: "Is projectBeacon secure and compliant?",
+      a: "Absolutely. With built-in Clerk authentication, enterprise-grade role-based access control, and comprehensive system audit logs, projectBeacon is built for security-conscious teams."
     }
   ]
 
@@ -90,7 +90,7 @@ export default function LandingPage() {
               <Shield className="h-5 w-5 text-navy" />
             </div>
             <span className="text-xl font-bold tracking-tight text-white">
-              ProjTrack
+              projectBeacon
             </span>
           </Link>
 
@@ -217,7 +217,7 @@ export default function LandingPage() {
                 <span className="h-3 w-3 rounded-full bg-green-500/80" />
               </div>
               <div className="text-xs text-white/40 font-mono tracking-wider">
-                projtrack-dashboard.app
+                projectBeacon-dashboard.app
               </div>
               <div className="w-12" />
             </div>
@@ -230,7 +230,7 @@ export default function LandingPage() {
                   <div className="h-7 w-7 rounded bg-gold/20 flex items-center justify-center">
                     <Shield className="h-4.5 w-4.5 text-gold" />
                   </div>
-                  <span className="font-semibold text-sm">ProjTrack</span>
+                  <span className="font-semibold text-sm">projectBeacon</span>
                 </div>
                 <div className="space-y-2">
                   <div className="h-8 rounded bg-white/10 flex items-center px-2.5 gap-2 text-xs text-white">
@@ -334,7 +334,7 @@ export default function LandingPage() {
             Built for High-Performance Teams
           </h2>
           <p className="mt-4 text-base text-white/70 leading-relaxed">
-            Stop wasting hours compiling status updates and managing rigid boards. ProjTrack delivers complete visibility out of the box.
+            Stop wasting hours compiling status updates and managing rigid boards. projectBeacon delivers complete visibility out of the box.
           </p>
         </div>
 
@@ -493,7 +493,7 @@ export default function LandingPage() {
                 </div>
                 <h3 className="text-xl font-bold">AI Status Reports</h3>
                 <p className="text-sm text-white/70 max-w-2xl leading-relaxed">
-                  No more manual status writing. ProjTrack automatically summarizes changes made by your team and generates professional, high-level project status reports.
+                  No more manual status writing. projectBeacon automatically summarizes changes made by your team and generates professional, high-level project status reports.
                 </p>
                 <div className="p-4 rounded-lg bg-navy-light/40 border border-gold-subtle bg-gold-fade space-y-2.5">
                   <div className="flex justify-between items-center text-xs">
@@ -589,11 +589,12 @@ export default function LandingPage() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gold/10 border border-gold/20">
               <Shield className="h-4.5 w-4.5 text-gold" />
             </div>
-            <span className="font-semibold text-white">ProjTrack</span>
+            <span className="font-semibold text-white">projectBeacon</span>
           </div>
-          <p>&copy; {new Date().getFullYear()} ProjTrack. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} projectBeacon. All rights reserved.</p>
         </div>
       </footer>
     </div>
   )
 }
+

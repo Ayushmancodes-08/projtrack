@@ -11,7 +11,7 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "ProjTrack — Autonomous Project Intelligence",
+  title: "projectBeacon — Autonomous Project Intelligence",
   description: "Enterprise-grade project intelligence platform with automated health monitoring",
 }
 

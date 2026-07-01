@@ -118,35 +118,73 @@ export default function ProjectDetailPage() {
       const fetchTeamMembers = async () => {
         const supabase = createClient()
         const membersList: { id: string; name: string }[] = []
-        
-        // Add Admin/Owner
-        const adminInitials = user.fullName 
-          ? user.fullName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) 
-          : "AD"
-        membersList.push({ id: adminInitials, name: user.fullName })
+        const seenEmails = new Set<string>()
 
-        // Fetch other members
-        const { data: dbMembers } = await supabase
-          .from("workspace_members")
+        // 1. Always add the admin/owner (only when viewing as admin)
+        if (!user.isTeamMember) {
+          const adminEmail = user.email.trim().toLowerCase()
+          membersList.push({ id: adminEmail, name: user.fullName || user.email.split("@")[0] })
+          seenEmails.add(adminEmail)
+        }
+
+        // 2. Workspace members — people who have already logged in at least once
+        if (!user.isTeamMember) {
+          const { data: dbMembers } = await supabase
+            .from("workspace_members")
+            .select("*")
+            .eq("workspace_id", user.organizationId)
+
+          if (dbMembers) {
+            dbMembers.forEach((m) => {
+              const email = (m.email || "").trim().toLowerCase()
+              if (email && !seenEmails.has(email)) {
+                const name = m.custom_title
+                  ? `${email.split("@")[0]} (${m.custom_title})`
+                  : email.split("@")[0]
+                membersList.push({ id: email, name })
+                seenEmails.add(email)
+              }
+            })
+          }
+        }
+
+        // 3. Project members for THIS project — people assigned to this project
+        const { data: projMemberRows } = await supabase
+          .from("project_members")
           .select("*")
-          .eq("workspace_id", user.organizationId)
-        
-        if (dbMembers) {
-          dbMembers.forEach((m) => {
-            const name = m.email.split("@")[0]
-            const initials = name.slice(0, 2).toUpperCase()
-            membersList.push({ id: initials, name })
+          .eq("project_id", projectId)
+
+        if (projMemberRows) {
+          projMemberRows.forEach((m) => {
+            const email = (m.email || "").trim().toLowerCase()
+            if (email && !seenEmails.has(email)) {
+              const name = m.email.split("@")[0]
+              membersList.push({ id: email, name })
+              seenEmails.add(email)
+            }
           })
         }
-        
-        // Fetch pending invites
+
+        // 4. If the current user is a team member, also include themselves
+        if (user.isTeamMember) {
+          const selfEmail = user.email.trim().toLowerCase()
+          if (!seenEmails.has(selfEmail)) {
+            membersList.push({ id: selfEmail, name: user.fullName || selfEmail.split("@")[0] })
+            seenEmails.add(selfEmail)
+          }
+        }
+
+        // 5. Pending invitations count (for display only)
         const { data: dbInvites } = await supabase
           .from("team_invitations")
-          .select("*")
+          .select("email")
           .eq("organization_id", user.organizationId)
-        
-        const totalCount = membersList.length + (dbInvites?.length || 0)
-        setDisplayTeamCount(totalCount)
+
+        const pendingCount = (dbInvites || []).filter(
+          (i) => !seenEmails.has(i.email?.trim().toLowerCase())
+        ).length
+
+        setDisplayTeamCount(membersList.length + pendingCount)
         setTeamMembers(membersList)
       }
       
@@ -573,7 +611,7 @@ export default function ProjectDetailPage() {
                       <option value="">Unassigned</option>
                       {teamMembers.map((m) => (
                         <option key={m.id} value={m.id}>
-                          {m.name} ({m.id})
+                          {m.name}
                         </option>
                       ))}
                     </select>
@@ -709,7 +747,7 @@ export default function ProjectDetailPage() {
                       <option value="">Unassigned</option>
                       {teamMembers.map((m) => (
                         <option key={m.id} value={m.id}>
-                          {m.name} ({m.id})
+                          {m.name}
                         </option>
                       ))}
                     </select>
@@ -1061,16 +1099,31 @@ export default function ProjectDetailPage() {
                         const supabase = createClient()
                         const targetEmail = newMemberEmail.trim().toLowerCase()
 
-                        // Check if already assigned to this project
-                        const isAlreadyAssigned = projectMembers.some(
+                        // Check if already assigned — first from local state (fast),
+                        // then confirm with a live DB query to guard against stale state
+                        const isAlreadyAssignedLocally = projectMembers.some(
                           (m) => m.email.toLowerCase() === targetEmail
                         )
-                        if (isAlreadyAssigned) {
+                        if (isAlreadyAssignedLocally) {
                           toast.info(`${newMemberEmail} is already assigned to this project.`)
+                          setIsAddingMember(false)
+                          return
+                        }
+                        // Live DB duplicate guard
+                        const { data: existingProjectMember } = await supabase
+                          .from("project_members")
+                          .select("id")
+                          .eq("project_id", projectId)
+                          .eq("email", targetEmail)
+                          .maybeSingle()
+                        if (existingProjectMember) {
+                          toast.info(`${newMemberEmail} is already assigned to this project.`)
+                          await fetchProjectMembers() // refresh stale list
+                          setIsAddingMember(false)
                           return
                         }
 
-                        // Check if they are already in the workspace or have a pending invite
+                        // Check if they are already in the workspace members table
                         const { data: memberData } = await supabase
                           .from("workspace_members")
                           .select("*")
@@ -1078,21 +1131,20 @@ export default function ProjectDetailPage() {
                           .eq("email", targetEmail)
                           .maybeSingle()
 
-                        const { data: inviteData } = await supabase
+                        // Check for ANY existing invite (accepted or pending) for this workspace
+                        // This prevents generating a new code on every session
+                        const { data: anyInvite } = await supabase
                           .from("team_invitations")
                           .select("*")
                           .eq("organization_id", user.organizationId)
                           .eq("email", targetEmail)
-                          .eq("accepted", false)
                           .maybeSingle()
 
-                        const isAlreadyInvitedOrMember = !!memberData || !!inviteData
-
-                        if (!isAlreadyInvitedOrMember) {
+                        if (!memberData && !anyInvite) {
+                          // Truly first-time invite — generate ONE code
                           const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase()
                           const generatedCode = `PT-${randomCode}`
 
-                          // Create team invitation
                           const { error: inviteError } = await supabase
                             .from("team_invitations")
                             .insert({
@@ -1112,7 +1164,7 @@ export default function ProjectDetailPage() {
 
                           if (inviteError) throw inviteError
 
-                          // Send email
+                          // Send email with the newly generated code
                           try {
                             const orgName =
                               localStorage.getItem(`projtrack_org_name_${user.organizationId}`) ||
@@ -1134,7 +1186,7 @@ export default function ProjectDetailPage() {
                                 invitedBy: user.fullName,
                               }),
                             })
-                            toast.success(`Sent workspace invitation email to ${targetEmail}! (Code: ${generatedCode})`, {
+                            toast.success(`Sent workspace invitation to ${targetEmail}! (Code: ${generatedCode})`, {
                               duration: 10000
                             })
                           } catch (emailErr) {
@@ -1144,8 +1196,14 @@ export default function ProjectDetailPage() {
                               { duration: 10000 }
                             )
                           }
+                        } else if (anyInvite) {
+                          // Already has a code — just inform the admin (don't generate a new one)
+                          toast.info(
+                            `${targetEmail} already has invite code: ${anyInvite.code}. Assigning to project directly.`,
+                            { duration: 8000 }
+                          )
                         } else {
-                          toast.info(`${newMemberEmail} is already invited or a workspace member. Assigning directly.`)
+                          toast.info(`${targetEmail} is already a workspace member. Assigning to project directly.`)
                         }
 
                         // Add member to the project

@@ -199,16 +199,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Sign out of Supabase Auth if currently signed in
     await supabase.auth.signOut()
 
-    // Ensure they are recorded in the workspace_members table
+    // Ensure they are recorded in the workspace_members table (idempotent)
     try {
       const { data: existingMember } = await supabase
         .from("workspace_members")
-        .select("*")
+        .select("id")
         .eq("workspace_id", invitation.organization_id)
         .eq("email", invitation.email.trim().toLowerCase())
         .maybeSingle()
 
       if (!existingMember) {
+        // First login: create workspace member row
         await supabase.from("workspace_members").insert({
           workspace_id: invitation.organization_id,
           email: invitation.email.trim().toLowerCase(),
@@ -216,13 +217,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           custom_title: invitation.custom_title,
           created_at: new Date().toISOString()
         })
-      }
 
-      // Mark the invitation as accepted so it is no longer pending on the dashboard
-      await supabase
-        .from("team_invitations")
-        .update({ accepted: true })
-        .eq("id", invitation.id)
+        // Mark the invitation as accepted only on the first successful login
+        await supabase
+          .from("team_invitations")
+          .update({ accepted: true })
+          .eq("id", invitation.id)
+      }
+      // If existingMember exists, this is a re-login — code is already static & valid, no DB changes needed
     } catch (dbErr) {
       console.warn("Failed to check/insert workspace member in database:", dbErr)
     }

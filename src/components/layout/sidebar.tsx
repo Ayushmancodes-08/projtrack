@@ -62,7 +62,7 @@ export function Sidebar() {
           </div>
           {!sidebarCollapsed && (
             <div className="flex flex-col">
-              <span className="text-sm font-bold tracking-tight">ProjTrack</span>
+              <span className="text-sm font-bold tracking-tight">projectBeacon</span>
               <span className="text-[9px] font-medium text-gold/60 uppercase tracking-[0.15em]">v2.0</span>
             </div>
           )}

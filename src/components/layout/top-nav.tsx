@@ -52,8 +52,23 @@ export function TopNav() {
       const doneStatus = project?.status_config.find((s) => s.category === "done")?.id || "done"
       await updateTaskStatus(n.project_id, n.task_id, doneStatus)
       await resolveNotification(n.id)
-      toast.success("Task approved and completed successfully!")
-    } catch {
+
+      // Mark project as completed if the approved task was the final task or as requested by the workflow
+      if (project) {
+        const { updateProjectDetails } = useAppStore.getState()
+        await updateProjectDetails(
+          project.id,
+          project.name,
+          project.description || "",
+          project.deadline || "",
+          project.health_status,
+          true // mark project as completed
+        )
+      }
+
+      toast.success("Task approved and project marked as completed successfully!")
+    } catch (e) {
+      console.error(e)
       toast.error("Failed to approve task")
     }
   }

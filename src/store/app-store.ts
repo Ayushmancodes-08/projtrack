@@ -55,7 +55,7 @@ type AppState = {
   updateTaskStatus: (projectId: string, taskId: string, newStatus: string) => Promise<void>
   updateTask: (projectId: string, taskId: string, updates: Partial<Task>) => Promise<void>
   deleteTask: (projectId: string, taskId: string) => Promise<void>
-  updateProjectDetails: (projectId: string, name: string, description: string, deadline: string, healthStatus: HealthStatus) => Promise<void>
+  updateProjectDetails: (projectId: string, name: string, description: string, deadline: string, healthStatus: HealthStatus, isCompleted?: boolean) => Promise<void>
   updateProjectColumns: (projectId: string, columns: StatusConfig[]) => Promise<void>
   addProjectMember: (projectId: string, email: string, role: string) => Promise<void>
   removeProjectMember: (projectId: string, memberId: string) => Promise<void>
@@ -114,15 +114,118 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const supabase = createClient()
       
-      // Fetch projects - filter by workspace_id, but allow independent users to see 'personal' projects too
-      let query = supabase.from("projects").select("*")
-      if (currentUser?.isTeamMember) {
-        query = query.eq("workspace_id", workspaceId)
-      } else {
-        query = query.or(`workspace_id.eq.${workspaceId},workspace_id.eq.personal`)
+      // ── TEAM MEMBER: Always use project_members table as primary source ──────────
+      if (currentUser?.isTeamMember && currentUser.email) {
+        const normalizedEmail = currentUser.email.trim().toLowerCase()
+        
+        const { data: assignedRows } = await supabase
+          .from("project_members")
+          .select("project_id")
+          .eq("email", normalizedEmail)
+
+        const assignedProjectIds = (assignedRows || []).map((r: any) => r.project_id)
+
+        if (assignedProjectIds.length > 0) {
+          const { data: assignedProjects } = await supabase
+            .from("projects")
+            .select("*")
+            .in("id", assignedProjectIds)
+
+          if (assignedProjects && assignedProjects.length > 0) {
+            const mappedAssigned: Project[] = assignedProjects.map((p: Record<string, unknown>) => {
+              let dbStatuses: StatusConfig[] = []
+              if (p.status_config) {
+                try {
+                  dbStatuses = typeof p.status_config === "string"
+                    ? JSON.parse(p.status_config)
+                    : (p.status_config as StatusConfig[])
+                } catch { /* ignore */ }
+              }
+              return {
+                id: p.id as string,
+                portfolio_id: null,
+                organization_id: (p.workspace_id as string) || "personal",
+                name: p.name as string,
+                description: (p.description as string) || "",
+                project_type: (p.status as ProjectType) || "SOFTWARE",
+                budget: null,
+                deadline: (p.deadline as string) || null,
+                client_name: null,
+                location: null,
+                health_status: (p.color as HealthStatus) || "ON_TRACK",
+                is_completed: false,
+                custom_fields: null,
+                status_config: dbStatuses,
+                created_at: p.created_at as string,
+                updated_at: p.updated_at as string
+              }
+            })
+
+            const { data: assignedTasks } = await supabase
+              .from("tasks")
+              .select("*")
+              .in("project_id", assignedProjectIds)
+
+            const assignedSyncedTasks: Record<string, Task[]> = {}
+            ;(assignedTasks || []).forEach((t: SupabaseTaskRow) => {
+              const pid = t.project_id as string
+              if (!assignedSyncedTasks[pid]) assignedSyncedTasks[pid] = []
+              assignedSyncedTasks[pid].push({
+                id: t.id as string,
+                milestone_id: null,
+                project_id: pid,
+                title: t.title as string,
+                description: (t.description as string) || "",
+                status: t.status as string,
+                priority: (t.priority as Priority) || "MEDIUM",
+                assignee_id: (t.assignee_id as string) || null,
+                due_date: t.due_date ? new Date(t.due_date as string | number | Date).toLocaleDateString() : null,
+                estimated_hours: null,
+                actual_hours: null,
+                blocked_reason: t.description && (t.description as string).startsWith("BLOCKED:") ? (t.description as string) : null,
+                is_critical_path: false,
+                sort_order: 0,
+                created_at: t.created_at as string,
+                updated_at: t.updated_at as string
+              })
+            })
+
+            // Fetch notifications
+            const { data: dbNotifications } = await supabase
+              .from("notifications_queue")
+              .select("*")
+              .order("created_at", { ascending: false })
+            const syncedNotifications: AppNotification[] = (dbNotifications || []).map((n: Record<string, any>) => ({
+              id: n.id,
+              title: n.title,
+              body: n.body,
+              type: n.data?.type || "info",
+              task_id: n.data?.task_id || "",
+              project_id: n.data?.project_id || "",
+              user_name: n.data?.user_name || "System",
+              timestamp: n.data?.timestamp || new Date(n.created_at).toLocaleString(),
+              resolved: n.read
+            }))
+
+            set({ projects: mappedAssigned, tasks: assignedSyncedTasks, notifications: syncedNotifications })
+            localStorage.setItem(`projtrack_projects_${workspaceId}`, JSON.stringify(mappedAssigned))
+            localStorage.setItem(`projtrack_tasks_${workspaceId}`, JSON.stringify(assignedSyncedTasks))
+            localStorage.setItem(`projtrack_notifications_${workspaceId}`, JSON.stringify(syncedNotifications))
+            return
+          }
+        }
+
+        // No assigned projects found for team member
+        set({ projects: [], tasks: {}, isLoaded: true })
+        return
       }
-      
-      const { data: dbProjects, error: projError } = await query
+      // ─────────────────────────────────────────────────────────────────────────
+
+      // Fetch projects - for admin/independent users
+      const { data: dbProjects, error: projError } = await supabase
+        .from("projects")
+        .select("*")
+        .or(`workspace_id.eq.${workspaceId},workspace_id.eq.personal`)
       
       if (!projError && dbProjects) {
         // Map DB projects to frontend Projects structure
@@ -275,6 +378,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Background Supabase upsert
     try {
       const supabase = createClient()
+      // Ensure the workspace record exists (idempotent)
+      await supabase.from("workspaces").upsert({
+        id: workspaceId,
+        owner_id: workspaceId,
+        name: `${currentUser?.fullName || currentUser?.email || "My"}'s Workspace`,
+        plan_tier: "free",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }, { onConflict: "id", ignoreDuplicates: true })
+
       await supabase.from("projects").upsert({
         id: newProject.id,
         workspace_id: workspaceId,
@@ -311,12 +424,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     try {
       const supabase = createClient()
-      await supabase.from("projects").delete().eq("id", projectId)
       await supabase.from("tasks").delete().eq("project_id", projectId)
-      
-      if (projectToDelete && projectToDelete.organization_id && projectToDelete.organization_id !== "personal") {
-        await supabase.from("workspace_members").delete().eq("workspace_id", projectToDelete.organization_id)
-      }
+      await supabase.from("project_members").delete().eq("project_id", projectId)
+      await supabase.from("projects").delete().eq("id", projectId)
     } catch (e) {
       console.warn("Supabase delete failed", e)
     }
@@ -368,7 +478,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         status: newTask.status,
         priority: newTask.priority,
         due_date: newTask.due_date ? new Date(newTask.due_date).toISOString() : null,
-        assignee_id: null // optional UI lookup
+        assignee_id: newTask.assignee_id || null
       })
       await logActivity(projectId, newTask.id, "task_created", title)
     } catch (e) {
@@ -444,7 +554,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           status: updatedTask.status,
           priority: updatedTask.priority,
           due_date: updatedTask.due_date ? new Date(updatedTask.due_date).toISOString() : null,
-          assignee_id: null
+          assignee_id: updatedTask.assignee_id || null
         })
         await logActivity(projectId, taskId, "task_updated", updatedTask.title)
       }
@@ -479,7 +589,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  updateProjectDetails: async (projectId: string, name: string, description: string, deadline: string, healthStatus: HealthStatus) => {
+  updateProjectDetails: async (projectId: string, name: string, description: string, deadline: string, healthStatus: HealthStatus, isCompleted?: boolean) => {
     const updatedProjects = get().projects.map((p) => {
       if (p.id === projectId) {
         return {
@@ -488,6 +598,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           description,
           deadline,
           health_status: healthStatus,
+          is_completed: isCompleted !== undefined ? isCompleted : p.is_completed,
           updated_at: new Date().toISOString()
         }
       }
@@ -506,6 +617,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         description,
         deadline,
         color: healthStatus,
+        status: isCompleted !== undefined ? (isCompleted ? "COMPLETED" : "SOFTWARE") : undefined,
         updated_at: new Date().toISOString()
       }).eq("id", projectId)
     } catch (e) {
@@ -544,12 +656,39 @@ export const useAppStore = create<AppState>((set, get) => ({
   addProjectMember: async (projectId: string, email: string, role: string) => {
     try {
       const supabase = createClient()
+      const normalizedEmail = email.trim().toLowerCase()
+
+      // Prevent duplicate enrollment: check if this member is already in this project
+      const { data: existing } = await supabase
+        .from("project_members")
+        .select("id")
+        .eq("project_id", projectId)
+        .eq("email", normalizedEmail)
+        .maybeSingle()
+
+      if (existing) {
+        // Already enrolled — do nothing (idempotent)
+        return
+      }
+
       await supabase.from("project_members").insert({
         project_id: projectId,
-        email: email.trim().toLowerCase(),
+        email: normalizedEmail,
         role: role,
         created_at: new Date().toISOString()
       })
+
+      // Also ensure they are in workspace_members so the assignee dropdown works
+      const currentUser = get().user
+      const workspaceId = currentUser?.organizationId || "personal"
+      await supabase.from("workspace_members").upsert({
+        workspace_id: workspaceId,
+        user_id: crypto.randomUUID ? crypto.randomUUID() : generateUUID(),
+        email: normalizedEmail,
+        role: "member",
+        custom_title: role === "DEVELOPER" ? "Developer" : role === "CLIENT" ? "Client" : "Viewer",
+        created_at: new Date().toISOString()
+      }, { onConflict: "workspace_id,email", ignoreDuplicates: true })
     } catch (e) {
       console.warn("Supabase add project member failed", e)
       throw e
