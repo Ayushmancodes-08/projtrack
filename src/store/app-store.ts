@@ -114,22 +114,36 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const supabase = createClient()
       
-      // ── TEAM MEMBER: Always use project_members table as primary source ──────────
+      // ── TEAM MEMBER: Always use project_members table and assigned tasks as primary source ──────────
       if (currentUser?.isTeamMember && currentUser.email) {
         const normalizedEmail = currentUser.email.trim().toLowerCase()
         
+        // Fetch project IDs from project_members
         const { data: assignedRows } = await supabase
           .from("project_members")
           .select("project_id")
           .eq("email", normalizedEmail)
 
-        const assignedProjectIds = (assignedRows || []).map((r: any) => r.project_id)
+        // Also fetch project IDs from tasks assigned to the user
+        const { data: taskRows } = await supabase
+          .from("tasks")
+          .select("project_id")
+          .eq("assignee_id", normalizedEmail)
 
-        if (assignedProjectIds.length > 0) {
+        const assignedProjectIdsFromMembers = (assignedRows || []).map((r: any) => r.project_id)
+        const assignedProjectIdsFromTasks = (taskRows || []).map((r: any) => r.project_id)
+        
+        // Merge and deduplicate project IDs
+        const uniqueProjectIds = Array.from(new Set([
+          ...assignedProjectIdsFromMembers,
+          ...assignedProjectIdsFromTasks
+        ])).filter(Boolean)
+
+        if (uniqueProjectIds.length > 0) {
           const { data: assignedProjects } = await supabase
             .from("projects")
             .select("*")
-            .in("id", assignedProjectIds)
+            .in("id", uniqueProjectIds)
 
           if (assignedProjects && assignedProjects.length > 0) {
             const mappedAssigned: Project[] = assignedProjects.map((p: Record<string, unknown>) => {
@@ -164,7 +178,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             const { data: assignedTasks } = await supabase
               .from("tasks")
               .select("*")
-              .in("project_id", assignedProjectIds)
+              .in("project_id", uniqueProjectIds)
 
             const assignedSyncedTasks: Record<string, Task[]> = {}
             ;(assignedTasks || []).forEach((t: SupabaseTaskRow) => {

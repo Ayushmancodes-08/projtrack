@@ -117,6 +117,13 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
     const sourceCol = source.droppableId
     const destCol = destination.droppableId
 
+    // Restrict task dragging so only the assigned user of a task can move it (admins/others cannot drag it)
+    const taskToMove = (localTasks[sourceCol] || [])[source.index]
+    if (!taskToMove || !taskToMove.assignee || taskToMove.assignee.trim().toLowerCase() !== userEmail.trim().toLowerCase()) {
+      toast.error("Only the assigned user can move this task.")
+      return
+    }
+
     if (sourceCol === destCol) {
       const column = [...(localTasks[sourceCol] || [])]
       const [removed] = column.splice(source.index, 1)
@@ -386,14 +393,7 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                     </div>
                   </div>
                   
-                  {/* BUG-024 FIXED: "+" button now calls onAddTask with the column's status id */}
-                  <button
-                    onClick={() => onAddTask?.(status.id)}
-                    className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-navy/10 hover:text-navy"
-                    title={`Add task to ${status.label}`}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
+                  {/* Plus button removed as columns are not assigned to users */}
                 </div>
 
                 {/* Droppable Area for tasks */}
@@ -411,9 +411,9 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                         const priority = PRIORITIES.find((p) => p.value === task.priority)
                         const hasVisualSignal = showVisualSignals && (task.blocked || task.priority === "CRITICAL")
                         
-                        // Restrict team members to only drag their own tasks, others appear dull
-                        const isAssignedToMe = !isTeamMember || (task.assignee && task.assignee.trim().toLowerCase() === userEmail.trim().toLowerCase())
-                        const isDragDisabled = isTeamMember && !isAssignedToMe
+                        // Restrict dragging so only the assigned user of a task can move it (admins/others cannot drag it)
+                        const isAssignedToMe = !!(task.assignee && task.assignee.trim().toLowerCase() === userEmail.trim().toLowerCase())
+                        const isDragDisabled = !isAssignedToMe
 
                         return (
                           <Draggable key={task.id} draggableId={task.id} index={index} isDragDisabled={isDragDisabled}>
