@@ -69,6 +69,7 @@ export default function SettingsPage() {
         .from("team_invitations")
         .select("*")
         .eq("organization_id", user.organizationId)
+        .eq("accepted", false)
         .order("created_at", { ascending: false })
 
       if (!invitesError && invitesData) {
@@ -164,13 +165,19 @@ export default function SettingsPage() {
         })
         const mailData = await mailResponse.json()
         if (mailData.success) {
-          toast.success(`Successfully created invitation and sent details to ${email}!`)
+          toast.success(`Successfully created invitation and sent details to ${email}! (Code: ${generatedCode})`, {
+            duration: 10000
+          })
         } else {
-          toast.warning(`Invitation created, but failed to send email: ${mailData.error || "Unknown error"}`)
+          toast.warning(`Invitation created, but failed to send email: ${mailData.error || "Unknown error"} (Code: ${generatedCode})`, {
+            duration: 10000
+          })
         }
       } catch (emailErr) {
         console.error("Failed to send invitation email via API:", emailErr)
-        toast.warning("Invitation created, but failed to dispatch invitation email.")
+        toast.warning(`Invitation created, but failed to dispatch invitation email. (Code: ${generatedCode})`, {
+          duration: 10000
+        })
       }
 
       setIsDialogOpen(false)

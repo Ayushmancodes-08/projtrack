@@ -53,6 +53,8 @@ type AppState = {
   deleteProject: (projectId: string) => Promise<void>
   addTask: (projectId: string, title: string, priority: Priority, assignee: string, dueDate: string, blocked: boolean, status?: string) => Promise<Task>
   updateTaskStatus: (projectId: string, taskId: string, newStatus: string) => Promise<void>
+  updateTask: (projectId: string, taskId: string, updates: Partial<Task>) => Promise<void>
+  deleteTask: (projectId: string, taskId: string) => Promise<void>
   updateProjectDetails: (projectId: string, name: string, description: string, deadline: string, healthStatus: HealthStatus) => Promise<void>
   updateProjectColumns: (projectId: string, columns: StatusConfig[]) => Promise<void>
   addProjectMember: (projectId: string, email: string, role: string) => Promise<void>
@@ -405,6 +407,75 @@ export const useAppStore = create<AppState>((set, get) => ({
       await logActivity(projectId, taskId, "status_changed", taskTitle, oldStatus, newStatus)
     } catch (e) {
       console.warn("Supabase task status update failed", e)
+    }
+  },
+
+  updateTask: async (projectId: string, taskId: string, updates: Partial<Task>) => {
+    const currentProjectTasks = get().tasks[projectId] || []
+    const task = currentProjectTasks.find(t => t.id === taskId)
+    const taskTitle = task?.title || ""
+
+    const updatedTasksForProject = currentProjectTasks.map((t) => {
+      if (t.id === taskId) {
+        return { ...t, ...updates, updated_at: new Date().toISOString() }
+      }
+      return t
+    })
+
+    const updatedTasks = {
+      ...get().tasks,
+      [projectId]: updatedTasksForProject
+    }
+
+    set({ tasks: updatedTasks })
+    const currentUser = get().user
+    const workspaceId = currentUser?.organizationId || "personal"
+    localStorage.setItem(`projtrack_tasks_${workspaceId}`, JSON.stringify(updatedTasks))
+
+    try {
+      const supabase = createClient()
+      const updatedTask = updatedTasksForProject.find(t => t.id === taskId)
+      if (updatedTask) {
+        await supabase.from("tasks").upsert({
+          id: updatedTask.id,
+          project_id: updatedTask.project_id,
+          title: updatedTask.title,
+          description: updatedTask.description || "",
+          status: updatedTask.status,
+          priority: updatedTask.priority,
+          due_date: updatedTask.due_date ? new Date(updatedTask.due_date).toISOString() : null,
+          assignee_id: null
+        })
+        await logActivity(projectId, taskId, "task_updated", updatedTask.title)
+      }
+    } catch (e) {
+      console.warn("Supabase task update failed", e)
+    }
+  },
+
+  deleteTask: async (projectId: string, taskId: string) => {
+    const currentProjectTasks = get().tasks[projectId] || []
+    const taskToDelete = currentProjectTasks.find(t => t.id === taskId)
+    const updatedTasksForProject = currentProjectTasks.filter(t => t.id !== taskId)
+
+    const updatedTasks = {
+      ...get().tasks,
+      [projectId]: updatedTasksForProject
+    }
+
+    set({ tasks: updatedTasks })
+    const currentUser = get().user
+    const workspaceId = currentUser?.organizationId || "personal"
+    localStorage.setItem(`projtrack_tasks_${workspaceId}`, JSON.stringify(updatedTasks))
+
+    try {
+      const supabase = createClient()
+      await supabase.from("tasks").delete().eq("id", taskId)
+      if (taskToDelete) {
+        await logActivity(projectId, taskId, "task_deleted", taskToDelete.title)
+      }
+    } catch (e) {
+      console.warn("Supabase task delete failed", e)
     }
   },
 

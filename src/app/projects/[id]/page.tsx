@@ -47,7 +47,7 @@ export default function ProjectDetailPage() {
   const router = useRouter()
   const projectId = params.id as string
 
-  const { projects, tasks: storeTasks, initializeStore, addTask, updateTaskStatus, isLoaded, addNotification, deleteProject } = useAppStore()
+  const { projects, tasks: storeTasks, initializeStore, addTask, updateTaskStatus, isLoaded, addNotification, deleteProject, updateTask, deleteTask } = useAppStore()
   const { user } = useAuth()
   
   const isAdmin = user ? !user.isTeamMember : false
@@ -67,6 +67,18 @@ export default function ProjectDetailPage() {
   const [isCreatingTask, setIsCreatingTask] = useState(false)
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Task Editing Dialog State
+  const [isEditTaskOpen, setIsEditTaskOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState<any | null>(null)
+  const [editTaskTitle, setEditTaskTitle] = useState("")
+  const [editTaskPriority, setEditTaskPriority] = useState<Priority>("MEDIUM")
+  const [editTaskAssignee, setEditTaskAssignee] = useState("")
+  const [editTaskDueDate, setEditTaskDueDate] = useState("")
+  const [editTaskBlocked, setEditTaskBlocked] = useState(false)
+  const [editTaskStatus, setEditTaskStatus] = useState("todo")
+  const [isUpdatingTask, setIsUpdatingTask] = useState(false)
+  const [isDeletingTask, setIsDeletingTask] = useState(false)
 
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([])
   const [displayTeamCount, setDisplayTeamCount] = useState(1)
@@ -298,6 +310,50 @@ export default function ProjectDetailPage() {
     }
   }
 
+  const handleUpdateTaskSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingTask) return
+    if (!editTaskTitle.trim()) {
+      toast.error("Please enter a task title")
+      return
+    }
+
+    try {
+      setIsUpdatingTask(true)
+      await updateTask(project.id, editingTask.id, {
+        title: editTaskTitle,
+        priority: editTaskPriority,
+        assignee_id: editTaskAssignee || null,
+        due_date: editTaskDueDate ? new Date(editTaskDueDate).toLocaleDateString() : null,
+        status: editTaskStatus,
+        blocked_reason: editTaskBlocked ? "Blocked" : null,
+        description: editTaskBlocked ? "BLOCKED: Requires review" : ""
+      })
+      toast.success("Task updated successfully!")
+      setIsEditTaskOpen(false)
+      setEditingTask(null)
+    } catch {
+      toast.error("Failed to update task")
+    } finally {
+      setIsUpdatingTask(false)
+    }
+  }
+
+  const handleDeleteTask = async () => {
+    if (!editingTask) return
+    try {
+      setIsDeletingTask(true)
+      await deleteTask(project.id, editingTask.id)
+      toast.success("Task deleted successfully!")
+      setIsEditTaskOpen(false)
+      setEditingTask(null)
+    } catch {
+      toast.error("Failed to delete task")
+    } finally {
+      setIsDeletingTask(false)
+    }
+  }
+
   const handleDeleteProject = async () => {
     try {
       setIsDeleting(true)
@@ -407,8 +463,34 @@ export default function ProjectDetailPage() {
             tasks={tasksByStatus}
             projectId={projectId}
             updateTaskStatus={updateTaskStatus}
-            onTaskClick={() => {
-              // Optionally handle detail drawer
+            onTaskClick={(taskId) => {
+              if (isAdmin) {
+                const task = projectTasks.find(t => t.id === taskId)
+                if (task) {
+                  setEditingTask(task)
+                  setEditTaskTitle(task.title)
+                  setEditTaskPriority(task.priority)
+                  setEditTaskAssignee(task.assignee_id || "")
+                  
+                  let dateVal = ""
+                  if (task.due_date) {
+                    try {
+                      const d = new Date(task.due_date)
+                      if (!isNaN(d.getTime())) {
+                        dateVal = d.toISOString().split("T")[0]
+                      }
+                    } catch (e) {
+                      console.error(e)
+                    }
+                  }
+                  setEditTaskDueDate(dateVal)
+                  setEditTaskBlocked(!!task.blocked_reason)
+                  setEditTaskStatus(task.status || "todo")
+                  setIsEditTaskOpen(true)
+                }
+              } else {
+                toast.info("Only administrators (workspace owners) can edit or delete tasks.")
+              }
             }}
             onAddTask={handleAddTaskForStatus}
             isAdmin={isAdmin}
@@ -546,6 +628,141 @@ export default function ProjectDetailPage() {
                 className="bg-gradient-to-r from-gold to-gold-dark text-navy text-xs font-semibold shadow-sm"
               >
                 {isCreatingTask ? "Adding..." : "Add Task"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Task Modal */}
+      <Dialog open={isEditTaskOpen} onOpenChange={setIsEditTaskOpen}>
+        <DialogContent className="sm:max-w-md border-0 p-0 overflow-hidden shadow-2xl rounded-2xl bg-white">
+          <form onSubmit={handleUpdateTaskSubmit}>
+            <div className="p-6 pb-4">
+              <DialogHeader className="mb-4 flex flex-row items-center justify-between">
+                <DialogTitle className="text-lg font-bold text-navy">Edit Workspace Task</DialogTitle>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  className="h-8 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-3 cursor-pointer"
+                  onClick={handleDeleteTask}
+                  disabled={isDeletingTask}
+                >
+                  {isDeletingTask ? "Deleting..." : "Delete Task"}
+                </Button>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-navy/80">Task Title</Label>
+                  <Input
+                    placeholder="Task Title"
+                    value={editTaskTitle}
+                    onChange={(e) => setEditTaskTitle(e.target.value)}
+                    required
+                    disabled={isUpdatingTask || isDeletingTask}
+                    className="h-9 text-sm border-gray-200 focus-visible:ring-gold"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-navy/80">Priority</Label>
+                    <select
+                      value={editTaskPriority}
+                      onChange={(e) => setEditTaskPriority(e.target.value as Priority)}
+                      disabled={isUpdatingTask || isDeletingTask}
+                      className="flex h-9 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm shadow-sm transition-colors focus:border-gold/50 focus:outline-none disabled:opacity-50"
+                    >
+                      <option value="LOW">Low</option>
+                      <option value="MEDIUM">Medium</option>
+                      <option value="HIGH">High</option>
+                      <option value="CRITICAL">Critical</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-navy/80">Column / Status</Label>
+                    <select
+                      value={editTaskStatus}
+                      onChange={(e) => setEditTaskStatus(e.target.value)}
+                      disabled={isUpdatingTask || isDeletingTask}
+                      className="flex h-9 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm shadow-sm transition-colors focus:border-gold/50 focus:outline-none disabled:opacity-50"
+                    >
+                      {statuses.map((s) => (
+                        <option key={s.id} value={s.id}>{s.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-navy/80">Assignee</Label>
+                    <select
+                      value={editTaskAssignee}
+                      onChange={(e) => setEditTaskAssignee(e.target.value)}
+                      disabled={isUpdatingTask || isDeletingTask}
+                      className="flex h-9 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm shadow-sm transition-colors focus:border-gold/50 focus:outline-none disabled:opacity-50"
+                    >
+                      <option value="">Unassigned</option>
+                      {teamMembers.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} ({m.id})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-navy/80">Due Date</Label>
+                    <Input
+                      type="date"
+                      value={editTaskDueDate}
+                      onChange={(e) => setEditTaskDueDate(e.target.value)}
+                      disabled={isUpdatingTask || isDeletingTask}
+                      className="h-9 text-sm border-gray-200 focus-visible:ring-gold"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-navy/80">Visual Signal / Impediment</Label>
+                  <div className="flex items-center gap-2 h-9">
+                    <input
+                      type="checkbox"
+                      id="edit-blocked"
+                      checked={editTaskBlocked}
+                      onChange={(e) => setEditTaskBlocked(e.target.checked)}
+                      disabled={isUpdatingTask || isDeletingTask}
+                      className="h-4 w-4 rounded border-gray-300 text-gold focus:ring-gold"
+                    />
+                    <label htmlFor="edit-blocked" className="text-xs font-medium text-navy/80 flex items-center gap-1 cursor-pointer">
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                      Mark as Blocked
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="bg-gray-50 px-6 py-4 border-t border-gray-100 flex sm:flex-row justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setIsEditTaskOpen(false)}
+                disabled={isUpdatingTask || isDeletingTask}
+                className="text-xs hover:bg-gray-100"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isUpdatingTask || isDeletingTask}
+                className="bg-gradient-to-r from-gold to-gold-dark text-navy text-xs font-semibold shadow-sm"
+              >
+                {isUpdatingTask ? "Saving..." : "Save Changes"}
               </Button>
             </DialogFooter>
           </form>
@@ -834,19 +1051,111 @@ export default function ProjectDetailPage() {
                   </select>
                   <Button
                     onClick={async () => {
+                      if (!user) return
                       if (!newMemberEmail.trim()) {
                         toast.error("Please enter an email address")
                         return
                       }
                       try {
                         setIsAddingMember(true)
+                        const supabase = createClient()
+                        const targetEmail = newMemberEmail.trim().toLowerCase()
+
+                        // Check if already assigned to this project
+                        const isAlreadyAssigned = projectMembers.some(
+                          (m) => m.email.toLowerCase() === targetEmail
+                        )
+                        if (isAlreadyAssigned) {
+                          toast.info(`${newMemberEmail} is already assigned to this project.`)
+                          return
+                        }
+
+                        // Check if they are already in the workspace or have a pending invite
+                        const { data: memberData } = await supabase
+                          .from("workspace_members")
+                          .select("*")
+                          .eq("workspace_id", user.organizationId)
+                          .eq("email", targetEmail)
+                          .maybeSingle()
+
+                        const { data: inviteData } = await supabase
+                          .from("team_invitations")
+                          .select("*")
+                          .eq("organization_id", user.organizationId)
+                          .eq("email", targetEmail)
+                          .eq("accepted", false)
+                          .maybeSingle()
+
+                        const isAlreadyInvitedOrMember = !!memberData || !!inviteData
+
+                        if (!isAlreadyInvitedOrMember) {
+                          const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase()
+                          const generatedCode = `PT-${randomCode}`
+
+                          // Create team invitation
+                          const { error: inviteError } = await supabase
+                            .from("team_invitations")
+                            .insert({
+                              email: targetEmail,
+                              code: generatedCode,
+                              organization_id: user.organizationId,
+                              role: newMemberRole,
+                              custom_title:
+                                newMemberRole === "DEVELOPER"
+                                  ? "Developer"
+                                  : newMemberRole === "CLIENT"
+                                  ? "Client"
+                                  : "Viewer",
+                              created_at: new Date().toISOString(),
+                              accepted: false
+                            })
+
+                          if (inviteError) throw inviteError
+
+                          // Send email
+                          try {
+                            const orgName =
+                              localStorage.getItem(`projtrack_org_name_${user.organizationId}`) ||
+                              `${user.fullName}'s Workspace`
+                            await fetch("/api/send-invite", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                email: targetEmail,
+                                code: generatedCode,
+                                role: newMemberRole,
+                                customTitle:
+                                  newMemberRole === "DEVELOPER"
+                                    ? "Developer"
+                                    : newMemberRole === "CLIENT"
+                                    ? "Client"
+                                    : "Viewer",
+                                organizationName: orgName,
+                                invitedBy: user.fullName,
+                              }),
+                            })
+                            toast.success(`Sent workspace invitation email to ${targetEmail}! (Code: ${generatedCode})`, {
+                              duration: 10000
+                            })
+                          } catch (emailErr) {
+                            console.error("Failed to send invitation email:", emailErr)
+                            toast.warning(
+                              `Workspace invitation created, but failed to send email. (Code: ${generatedCode})`,
+                              { duration: 10000 }
+                            )
+                          }
+                        } else {
+                          toast.info(`${newMemberEmail} is already invited or a workspace member. Assigning directly.`)
+                        }
+
+                        // Add member to the project
                         const { addProjectMember } = useAppStore.getState()
-                        await addProjectMember(projectId, newMemberEmail, newMemberRole)
+                        await addProjectMember(projectId, targetEmail, newMemberRole)
                         toast.success(`Assigned ${newMemberEmail} to project!`)
                         setNewMemberEmail("")
                         await fetchProjectMembers()
                       } catch {
-                        toast.error("Failed to assign member to project. Ensure the project_members table exists.")
+                        toast.error("Failed to assign member to project.")
                       } finally {
                         setIsAddingMember(false)
                       }

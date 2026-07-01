@@ -217,6 +217,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           created_at: new Date().toISOString()
         })
       }
+
+      // Mark the invitation as accepted so it is no longer pending on the dashboard
+      await supabase
+        .from("team_invitations")
+        .update({ accepted: true })
+        .eq("id", invitation.id)
     } catch (dbErr) {
       console.warn("Failed to check/insert workspace member in database:", dbErr)
     }
