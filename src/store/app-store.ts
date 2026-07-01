@@ -80,6 +80,173 @@ function generateUUID(): string {
 // BUG-005 FIXED: Replace `any` with a proper typed record
 type SupabaseTaskRow = Record<string, unknown>
 
+// Helper functions to map DB results to frontend types
+const mapDbTaskToTask = (t: any): Task => {
+  return {
+    id: t.id,
+    milestone_id: null,
+    project_id: t.project_id,
+    title: t.title,
+    description: t.description || "",
+    status: t.status,
+    priority: t.priority || "MEDIUM",
+    assignee_id: t.assignee_id || null,
+    due_date: t.due_date ? new Date(t.due_date).toLocaleDateString() : null,
+    estimated_hours: t.estimate_minutes ? Math.round(t.estimate_minutes / 60) : null,
+    actual_hours: null,
+    blocked_reason: t.description && t.description.startsWith("BLOCKED:") ? t.description : null,
+    is_critical_path: false,
+    sort_order: 0,
+    created_at: t.created_at,
+    updated_at: t.updated_at
+  }
+}
+
+const mapDbProjectToProject = (p: any): Project => {
+  let dbStatuses: StatusConfig[] = []
+  if (p.status_config) {
+    try {
+      dbStatuses = typeof p.status_config === "string"
+        ? JSON.parse(p.status_config)
+        : (p.status_config as StatusConfig[])
+    } catch { /* ignore */ }
+  }
+  return {
+    id: p.id,
+    portfolio_id: null,
+    organization_id: p.workspace_id || "personal",
+    name: p.name,
+    description: p.description || "",
+    project_type: p.status || "SOFTWARE",
+    budget: null,
+    deadline: p.deadline || null,
+    client_name: null,
+    location: null,
+    health_status: p.color || "ON_TRACK",
+    is_completed: p.status === "COMPLETED",
+    custom_fields: null,
+    status_config: dbStatuses,
+    created_at: p.created_at,
+    updated_at: p.updated_at
+  }
+}
+
+const mapDbNotificationToNotification = (n: any): AppNotification => {
+  return {
+    id: n.id,
+    title: n.title,
+    body: n.body,
+    type: n.data?.type || "info",
+    task_id: n.data?.task_id || "",
+    project_id: n.data?.project_id || "",
+    user_name: n.data?.user_name || "System",
+    timestamp: n.data?.timestamp || new Date(n.created_at).toLocaleString(),
+    resolved: n.read
+  }
+}
+
+let activeRealtimeChannel: any = null
+
+const setupRealtimeSubscription = (supabase: any, workspaceId: string) => {
+  if (activeRealtimeChannel) {
+    return
+  }
+
+  activeRealtimeChannel = supabase
+    .channel('db-changes')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'tasks' },
+      (payload: any) => {
+        const { eventType, new: newRow, old: oldRow } = payload
+        const { tasks } = useAppStore.getState()
+        const updatedTasks = { ...tasks }
+
+        if (eventType === 'INSERT' || eventType === 'UPDATE') {
+          const task = mapDbTaskToTask(newRow)
+          const pid = task.project_id
+          if (!updatedTasks[pid]) {
+            updatedTasks[pid] = []
+          }
+          const index = updatedTasks[pid].findIndex(t => t.id === task.id)
+          if (index > -1) {
+            updatedTasks[pid][index] = task
+          } else {
+            updatedTasks[pid] = [...updatedTasks[pid], task]
+          }
+        } else if (eventType === 'DELETE') {
+          const taskId = oldRow.id
+          for (const pid of Object.keys(updatedTasks)) {
+            updatedTasks[pid] = updatedTasks[pid].filter(t => t.id !== taskId)
+          }
+        }
+
+        useAppStore.setState({ tasks: updatedTasks })
+        localStorage.setItem(`projtrack_tasks_${workspaceId}`, JSON.stringify(updatedTasks))
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'projects' },
+      (payload: any) => {
+        const { eventType, new: newRow, old: oldRow } = payload
+        const { projects, tasks } = useAppStore.getState()
+        let updatedProjects = [...projects]
+        let updatedTasks = { ...tasks }
+
+        if (eventType === 'INSERT' || eventType === 'UPDATE') {
+          const project = mapDbProjectToProject(newRow)
+          const index = updatedProjects.findIndex(p => p.id === project.id)
+          if (index > -1) {
+            updatedProjects[index] = {
+              ...updatedProjects[index],
+              ...project
+            }
+          } else {
+            updatedProjects.push(project)
+            if (!updatedTasks[project.id]) {
+              updatedTasks[project.id] = []
+            }
+          }
+        } else if (eventType === 'DELETE') {
+          const projectId = oldRow.id
+          updatedProjects = updatedProjects.filter(p => p.id !== projectId)
+          delete updatedTasks[projectId]
+        }
+
+        useAppStore.setState({ projects: updatedProjects, tasks: updatedTasks })
+        localStorage.setItem(`projtrack_projects_${workspaceId}`, JSON.stringify(updatedProjects))
+        localStorage.setItem(`projtrack_tasks_${workspaceId}`, JSON.stringify(updatedTasks))
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'notifications_queue' },
+      (payload: any) => {
+        const { eventType, new: newRow, old: oldRow } = payload
+        const { notifications } = useAppStore.getState()
+        let updatedNotifications = [...notifications]
+
+        if (eventType === 'INSERT' || eventType === 'UPDATE') {
+          const notification = mapDbNotificationToNotification(newRow)
+          const index = updatedNotifications.findIndex(n => n.id === notification.id)
+          if (index > -1) {
+            updatedNotifications[index] = notification
+          } else {
+            updatedNotifications = [notification, ...updatedNotifications]
+          }
+        } else if (eventType === 'DELETE') {
+          const notificationId = oldRow.id
+          updatedNotifications = updatedNotifications.filter(n => n.id !== notificationId)
+        }
+
+        useAppStore.setState({ notifications: updatedNotifications })
+        localStorage.setItem(`projtrack_notifications_${workspaceId}`, JSON.stringify(updatedNotifications))
+      }
+    )
+    .subscribe()
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   projects: [],
   tasks: {},
@@ -225,6 +392,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             localStorage.setItem(`projtrack_projects_${workspaceId}`, JSON.stringify(mappedAssigned))
             localStorage.setItem(`projtrack_tasks_${workspaceId}`, JSON.stringify(assignedSyncedTasks))
             localStorage.setItem(`projtrack_notifications_${workspaceId}`, JSON.stringify(syncedNotifications))
+            setupRealtimeSubscription(supabase, workspaceId)
             return
           }
         }
@@ -378,6 +546,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         localStorage.setItem(`projtrack_projects_${workspaceId}`, JSON.stringify(syncedProjects))
         localStorage.setItem(`projtrack_tasks_${workspaceId}`, JSON.stringify(syncedTasks))
         localStorage.setItem(`projtrack_notifications_${workspaceId}`, JSON.stringify(syncedNotifications))
+        setupRealtimeSubscription(supabase, workspaceId)
       }
     } catch (e) {
       console.warn("Supabase fetch failed, running in offline/LocalStorage mode", e)
@@ -665,6 +834,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         status: isCompleted !== undefined ? (isCompleted ? "COMPLETED" : "SOFTWARE") : undefined,
         updated_at: new Date().toISOString()
       }).eq("id", projectId)
+      await logActivity(projectId, null, "project_updated", name)
     } catch (e) {
       console.warn("Supabase project update failed", e)
     }
@@ -693,6 +863,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         status_config: columns,
         updated_at: new Date().toISOString()
       }).eq("id", projectId)
+      const project = updatedProjects.find(p => p.id === projectId)
+      await logActivity(projectId, null, "columns_updated", project?.name || "Project")
     } catch (e) {
       console.warn("Supabase project columns update failed", e)
     }
@@ -734,6 +906,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         custom_title: role === "DEVELOPER" ? "Developer" : role === "CLIENT" ? "Client" : "Viewer",
         created_at: new Date().toISOString()
       }, { onConflict: "workspace_id,email", ignoreDuplicates: true })
+      await logActivity(projectId, null, "member_added", normalizedEmail)
     } catch (e) {
       console.warn("Supabase add project member failed", e)
       throw e
@@ -743,7 +916,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   removeProjectMember: async (projectId: string, memberId: string) => {
     try {
       const supabase = createClient()
+      const { data: member } = await supabase
+        .from("project_members")
+        .select("email")
+        .eq("id", memberId)
+        .maybeSingle()
+
       await supabase.from("project_members").delete().eq("id", memberId)
+      if (member) {
+        await logActivity(projectId, null, "member_removed", member.email)
+      }
     } catch (e) {
       console.warn("Supabase remove project member failed", e)
       throw e

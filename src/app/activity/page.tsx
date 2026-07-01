@@ -57,7 +57,7 @@ export default function ActivityFeedPage() {
           const mapped: ActivityItem[] = data.map((log) => {
             const isSelf = log.actor_email === user?.email
             const actorName = isSelf ? `${log.actor_name} (You)` : log.actor_name
-            const initials = log.actor_name.slice(0, 2).toUpperCase()
+            const initials = (log.actor_name || "System").slice(0, 2).toUpperCase()
             
             let actionText = ""
             let activityType = "status"
@@ -71,6 +71,14 @@ export default function ActivityFeedPage() {
             } else if (log.action === "status_changed") {
               actionText = `moved task to "${log.new_value}"`
               activityType = log.new_value?.toLowerCase() === "completed" || log.new_value?.toLowerCase() === "done" ? "completion" : "status"
+            } else if (log.action === "task_updated") {
+              actionText = "updated task"
+              activityType = "status"
+            } else if (log.action === "task_deleted") {
+              actionText = "deleted task"
+              activityType = "status"
+            } else {
+              actionText = log.action || "performed action"
             }
 
             return {
@@ -95,6 +103,60 @@ export default function ActivityFeedPage() {
     
     if (user) {
       fetchLogs()
+
+      const supabase = createClient()
+      const channel = supabase
+        .channel("activity-logs-realtime")
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "activity_logs" },
+          (payload) => {
+            const log = payload.new
+            const isSelf = log.actor_email === user?.email
+            const actorName = isSelf ? `${log.actor_name} (You)` : log.actor_name
+            const initials = (log.actor_name || "System").slice(0, 2).toUpperCase()
+            
+            let actionText = ""
+            let activityType = "status"
+            
+            if (log.action === "project_created") {
+              actionText = "created project"
+              activityType = "creation"
+            } else if (log.action === "task_created") {
+              actionText = "created task"
+              activityType = "creation"
+            } else if (log.action === "status_changed") {
+              actionText = `moved task to "${log.new_value}"`
+              activityType = log.new_value?.toLowerCase() === "completed" || log.new_value?.toLowerCase() === "done" ? "completion" : "status"
+            } else if (log.action === "task_updated") {
+              actionText = "updated task"
+              activityType = "status"
+            } else if (log.action === "task_deleted") {
+              actionText = "deleted task"
+              activityType = "status"
+            } else {
+              actionText = log.action || "performed action"
+            }
+
+            const newItem: ActivityItem = {
+              id: log.id,
+              actor: actorName,
+              initials: initials,
+              action: actionText,
+              target: log.details || "",
+              time: new Date(log.created_at).toLocaleString(),
+              type: activityType,
+              to: log.new_value || undefined
+            }
+
+            setActivities((prev) => [newItem, ...prev])
+          }
+        )
+        .subscribe()
+
+      return () => {
+        supabase.removeChannel(channel)
+      }
     }
   }, [user])
 

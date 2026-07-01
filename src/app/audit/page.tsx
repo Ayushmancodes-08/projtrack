@@ -16,6 +16,7 @@ type AuditEntry = {
   timestamp: string
   actor: string
   action: string
+  target: string
   field: string
   oldVal: string
   newVal: string
@@ -23,9 +24,82 @@ type AuditEntry = {
 
 const actionColors: Record<string, string> = {
   "Project Created": "bg-blue-50 text-blue-700 border-blue-200",
+  "Project Updated": "bg-sky-50 text-sky-700 border-sky-200",
+  "Columns Updated": "bg-indigo-50 text-indigo-700 border-indigo-200",
+  "Member Added": "bg-teal-50 text-teal-700 border-teal-200",
+  "Member Removed": "bg-rose-50 text-rose-700 border-rose-200",
   "Task Created": "bg-green-50 text-green-700 border-green-200",
   "Task Moved": "bg-purple-50 text-purple-700 border-purple-200",
+  "Task Updated": "bg-amber-50 text-amber-700 border-amber-200",
+  "Task Deleted": "bg-red-50 text-red-700 border-red-200",
   "Impediment Flagged": "bg-red-50 text-red-700 border-red-200",
+}
+
+const mapDbLogToAuditEntry = (log: any, currentUserEmail?: string): AuditEntry => {
+  const isSelf = log.actor_email === currentUserEmail
+  const actorName = isSelf ? `${log.actor_name} (You)` : log.actor_name
+
+  let actionText = "Task Moved"
+  let fieldChanged = "status"
+  let oldVal = log.old_value || "—"
+  let newVal = log.new_value || "—"
+
+  if (log.action === "project_created") {
+    actionText = "Project Created"
+    fieldChanged = "name"
+    newVal = log.details || "—"
+  } else if (log.action === "project_updated") {
+    actionText = "Project Updated"
+    fieldChanged = "details"
+    newVal = log.details || "—"
+  } else if (log.action === "columns_updated") {
+    actionText = "Columns Updated"
+    fieldChanged = "status_config"
+  } else if (log.action === "member_added") {
+    actionText = "Member Added"
+    fieldChanged = "member"
+    newVal = log.details || "—"
+  } else if (log.action === "member_removed") {
+    actionText = "Member Removed"
+    fieldChanged = "member"
+    newVal = log.details || "—"
+  } else if (log.action === "task_created") {
+    actionText = "Task Created"
+    fieldChanged = "title"
+    newVal = log.details || "—"
+  } else if (log.action === "task_updated") {
+    actionText = "Task Updated"
+    fieldChanged = "title"
+    newVal = log.details || "—"
+  } else if (log.action === "task_deleted") {
+    actionText = "Task Deleted"
+    fieldChanged = "title"
+    newVal = log.details || "—"
+  } else if (log.action === "status_changed") {
+    actionText = "Task Moved"
+    fieldChanged = "status"
+  } else {
+    actionText = log.action || "Action Logged"
+    fieldChanged = "details"
+    newVal = log.details || "—"
+  }
+
+  return {
+    timestamp: new Date(log.created_at).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }),
+    actor: actorName,
+    action: actionText,
+    target: log.details || "—",
+    field: fieldChanged,
+    oldVal: oldVal,
+    newVal: newVal,
+  }
 }
 
 export default function AuditLedgerPage() {
@@ -43,41 +117,7 @@ export default function AuditLedgerPage() {
           .order("created_at", { ascending: false })
 
         if (!error && data) {
-          const mapped: AuditEntry[] = data.map((log) => {
-            const isSelf = log.actor_email === user?.email
-            const actorName = isSelf ? `${log.actor_name} (You)` : log.actor_name
-
-            let actionText = "Task Moved"
-            let fieldChanged = "status"
-            let oldVal = log.old_value || "—"
-            let newVal = log.new_value || "—"
-
-            if (log.action === "project_created") {
-              actionText = "Project Created"
-              fieldChanged = "name"
-              newVal = log.details || "—"
-            } else if (log.action === "task_created") {
-              actionText = "Task Created"
-              fieldChanged = "title"
-              newVal = log.details || "—"
-            }
-
-            return {
-              timestamp: new Date(log.created_at).toLocaleString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-              }),
-              actor: actorName,
-              action: actionText,
-              field: fieldChanged,
-              oldVal: oldVal,
-              newVal: newVal,
-            }
-          })
+          const mapped: AuditEntry[] = data.map((log) => mapDbLogToAuditEntry(log, user?.email))
           setAuditEntries(mapped)
         }
       } catch (e) {
@@ -89,6 +129,23 @@ export default function AuditLedgerPage() {
 
     if (user) {
       fetchAuditLogs()
+
+      const supabase = createClient()
+      const channel = supabase
+        .channel("audit-logs-realtime")
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "activity_logs" },
+          (payload) => {
+            const newEntry = mapDbLogToAuditEntry(payload.new, user?.email)
+            setAuditEntries((prev) => [newEntry, ...prev])
+          }
+        )
+        .subscribe()
+
+      return () => {
+        supabase.removeChannel(channel)
+      }
     }
   }, [user])
 
@@ -152,9 +209,16 @@ export default function AuditLedgerPage() {
                     <TableCell className="text-xs font-medium text-muted-foreground">{entry.timestamp}</TableCell>
                     <TableCell className="text-xs font-semibold text-navy">{entry.actor}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={cn("text-[10px] font-semibold tracking-wide", actionColors[entry.action] || "bg-gray-50 text-gray-700 border-gray-200")}>
-                        {entry.action}
-                      </Badge>
+                      <div className="flex flex-col gap-0.5">
+                        <Badge variant="outline" className={cn("text-[10px] font-semibold tracking-wide w-fit", actionColors[entry.action] || "bg-gray-50 text-gray-700 border-gray-200")}>
+                          {entry.action}
+                        </Badge>
+                        {entry.target && entry.target !== "—" && (
+                          <span className="text-[10px] text-muted-foreground/80 font-medium italic mt-0.5 max-w-[180px] truncate">
+                            {entry.target}
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-xs font-mono text-muted-foreground">{entry.field}</TableCell>
                     <TableCell>
