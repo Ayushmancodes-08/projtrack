@@ -85,11 +85,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data: { session } } = await supabase.auth.getSession()
       if (session?.user) {
         // Fetch profile
-        const { data: profile } = await supabase
+        let { data: profile } = await supabase
           .from("profiles")
           .select("*")
           .eq("id", session.user.id)
-          .single()
+          .maybeSingle()
+
+        // Auto-provision profile if it doesn't exist
+        if (!profile) {
+          try {
+            const fullName = session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "Independent User"
+            const { data: newProfile, error: insertError } = await supabase
+              .from("profiles")
+              .upsert({
+                id: session.user.id,
+                email: session.user.email || "",
+                full_name: fullName,
+                created_at: new Date().toISOString(),
+              })
+              .select()
+              .maybeSingle()
+            
+            if (!insertError && newProfile) {
+              profile = newProfile
+            }
+          } catch (insertErr) {
+            console.error("Failed to automatically create profile:", insertErr)
+          }
+        }
 
         setUser({
           id: session.user.id,
