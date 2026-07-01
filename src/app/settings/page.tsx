@@ -146,14 +146,40 @@ export default function SettingsPage() {
 
       if (error) throw error
 
-      toast.success(`Successfully created invitation for ${email}! Code: ${generatedCode}`)
+      // Send the invitation details to the person's email
+      try {
+        const mailResponse = await fetch("/api/send-invite", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: email.trim().toLowerCase(),
+            code: generatedCode,
+            role: role,
+            customTitle: customTitle.trim() || (role === "DEVELOPER" ? "Developer" : role === "CLIENT" ? "Client" : "Viewer"),
+            organizationName: orgName || `${user.fullName}'s Workspace`,
+            invitedBy: user.fullName,
+          }),
+        })
+        const mailData = await mailResponse.json()
+        if (mailData.success) {
+          toast.success(`Successfully created invitation and sent details to ${email}!`)
+        } else {
+          toast.warning(`Invitation created, but failed to send email: ${mailData.error || "Unknown error"}`)
+        }
+      } catch (emailErr) {
+        console.error("Failed to send invitation email via API:", emailErr)
+        toast.warning("Invitation created, but failed to dispatch invitation email.")
+      }
+
       setIsDialogOpen(false)
       setEmail("")
       setCustomTitle("")
       
       // Refresh invitation list
       await fetchSettingsData()
-    } catch (err: any) {
+    } catch (err) {
       console.error(err)
       toast.error("Failed to send invitation. Make sure the team_invitations table exists.")
     } finally {

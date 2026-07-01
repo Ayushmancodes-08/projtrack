@@ -199,6 +199,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Sign out of Supabase Auth if currently signed in
     await supabase.auth.signOut()
 
+    // Ensure they are recorded in the workspace_members table
+    try {
+      const { data: existingMember } = await supabase
+        .from("workspace_members")
+        .select("*")
+        .eq("workspace_id", invitation.organization_id)
+        .eq("email", invitation.email.trim().toLowerCase())
+        .maybeSingle()
+
+      if (!existingMember) {
+        await supabase.from("workspace_members").insert({
+          workspace_id: invitation.organization_id,
+          email: invitation.email.trim().toLowerCase(),
+          role: invitation.role,
+          custom_title: invitation.custom_title,
+          created_at: new Date().toISOString()
+        })
+      }
+    } catch (dbErr) {
+      console.warn("Failed to check/insert workspace member in database:", dbErr)
+    }
+
     // Store team member session in cookie
     const sessionData = {
       email: invitation.email,
