@@ -397,16 +397,17 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                 </div>
 
                 {/* Droppable Area for tasks */}
-                <Droppable droppableId={status.id}>
-                  {(provided, snapshot) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.droppableProps}
-                      className={cn(
-                        "flex flex-col gap-3 px-3 py-4 flex-1 overflow-y-auto scrollbar-clean transition-all duration-200 min-h-[200px]",
-                        snapshot.isDraggingOver && "bg-navy/[0.03]"
-                      )}
-                    >
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden rounded-b-2xl">
+                  <Droppable droppableId={status.id}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        className={cn(
+                          "flex flex-col gap-3 px-3 py-4 flex-1 overflow-y-auto scrollbar-clean transition-all duration-200 min-h-[200px]",
+                          snapshot.isDraggingOver && "bg-navy/[0.03]"
+                        )}
+                      >
                       {colTasks.map((task, index) => {
                         const priority = PRIORITIES.find((p) => p.value === task.priority)
                         const hasVisualSignal = showVisualSignals && (task.blocked || task.priority === "CRITICAL")
@@ -526,6 +527,7 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                     </div>
                   )}
                 </Droppable>
+              </div>
               </div>
             )
           })}
