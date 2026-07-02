@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { AppShell } from "@/components/layout/app-shell"
 import {
   FolderKanban,
@@ -18,6 +18,7 @@ import { useAppStore } from "@/store/app-store"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
+import { createClient } from "@/lib/supabase/client"
 
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -31,6 +32,28 @@ export default function DashboardPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
+
+  const [memberCounts, setMemberCounts] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    if (user && projects.length > 0) {
+      const fetchCounts = async () => {
+        const supabase = createClient()
+        const { data, error } = await supabase
+          .from("project_members")
+          .select("project_id")
+        
+        if (!error && data) {
+          const counts: Record<string, number> = {}
+          data.forEach((row: any) => {
+            counts[row.project_id] = (counts[row.project_id] || 0) + 1
+          })
+          setMemberCounts(counts)
+        }
+      }
+      fetchCounts()
+    }
+  }, [user, projects])
 
   if (!isLoaded) {
     return (
@@ -202,9 +225,19 @@ export default function DashboardPage() {
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {projects.map((project) => {
+                const template = getTemplate(project.project_type)
+                const statuses = project.status_config && project.status_config.length > 0
+                  ? project.status_config
+                  : template.defaultStatuses
+
                 const projectTasks = tasks[project.id] || []
+                const completedTasksCount = projectTasks.filter((t) => {
+                  const taskStatus = statuses.find((s) => s.id === t.status)
+                  return taskStatus?.category === "done" || t.status === "done" || t.status === "completed"
+                }).length
+
                 const progressVal = projectTasks.length > 0 
-                  ? Math.round((projectTasks.filter(t => t.status === 'done').length / projectTasks.length) * 100)
+                  ? Math.round((completedTasksCount / projectTasks.length) * 100)
                   : 0
 
                 return (
@@ -213,7 +246,7 @@ export default function DashboardPage() {
                       variant="outline"
                       className="mb-2 ml-0.5 text-[9px] font-medium text-muted-foreground/60 border-muted-foreground/10 px-2 py-0"
                     >
-                      {getTemplate(project.project_type).label}
+                      {template.label}
                     </Badge>
                     <ProjectHealthCard 
                       id={project.id}
@@ -221,7 +254,7 @@ export default function DashboardPage() {
                       healthStatus={project.health_status}
                       progress={progressVal}
                       deadline={project.deadline || ""}
-                      memberCount={projectTasks.length}
+                      memberCount={(memberCounts[project.id] || 0) + 1}
                     />
                   </div>
                 )}
