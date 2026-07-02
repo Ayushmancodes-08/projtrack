@@ -51,10 +51,16 @@ app.prepare().then(() => {
     socket.on("task-status-updated", (data) => {
       console.log(`Task status updated received on socket:`, data);
       const { projectId } = data;
+      // Ensure projectId is always included in the re-broadcast payload
+      const broadcastPayload = {
+        ...data,
+        timestamp: data.timestamp || new Date().toISOString(),
+        projectId,
+      };
       if (projectId) {
-        socket.to(projectId).emit("task-status-changed", data);
+        socket.to(projectId).emit("task-status-changed", broadcastPayload);
       } else {
-        socket.broadcast.emit("task-status-changed", data);
+        socket.broadcast.emit("task-status-changed", broadcastPayload);
       }
     });
 

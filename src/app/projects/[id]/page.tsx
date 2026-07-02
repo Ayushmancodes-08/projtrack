@@ -200,6 +200,100 @@ export default function ProjectDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, projectId])
 
+  // ── Per-project Supabase Realtime subscription ──────────────────────────────
+  // Acts as a fallback layer: if Socket.io misses an event (e.g. admin wasn't
+  // in the room yet), Supabase will still deliver the DB change and update the
+  // store. This ensures the admin always sees the latest task positions.
+  useEffect(() => {
+    if (!projectId) return
+    const supabase = createClient()
+    const channel = supabase
+      .channel(`project-tasks-${projectId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "tasks", filter: `project_id=eq.${projectId}` },
+        (payload: any) => {
+          const newRow = payload.new
+          if (!newRow) return
+          const state = useAppStore.getState()
+          const currentTasks = state.tasks[projectId] || []
+          const updatedTasksForProject = currentTasks.map((t) => {
+            if (t.id === newRow.id) {
+              return {
+                ...t,
+                status: newRow.status,
+                title: newRow.title || t.title,
+                priority: newRow.priority || t.priority,
+                assignee_id: newRow.assignee_id ?? t.assignee_id,
+                due_date: newRow.due_date
+                  ? new Date(newRow.due_date).toLocaleDateString()
+                  : t.due_date,
+                updated_at: newRow.updated_at || new Date().toISOString(),
+              }
+            }
+            return t
+          })
+          const updatedTasks = { ...state.tasks, [projectId]: updatedTasksForProject }
+          useAppStore.setState({ tasks: updatedTasks })
+          const workspaceId = state.user?.organizationId || "personal"
+          localStorage.setItem(`projtrack_tasks_${workspaceId}`, JSON.stringify(updatedTasks))
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "tasks", filter: `project_id=eq.${projectId}` },
+        (payload: any) => {
+          const newRow = payload.new
+          if (!newRow) return
+          const state = useAppStore.getState()
+          const currentTasks = state.tasks[projectId] || []
+          const alreadyExists = currentTasks.some((t) => t.id === newRow.id)
+          if (alreadyExists) return
+          const newTask = {
+            id: newRow.id,
+            milestone_id: null,
+            project_id: newRow.project_id,
+            title: newRow.title,
+            description: newRow.description || "",
+            status: newRow.status,
+            priority: newRow.priority || "MEDIUM",
+            assignee_id: newRow.assignee_id || null,
+            due_date: newRow.due_date ? new Date(newRow.due_date).toLocaleDateString() : null,
+            estimated_hours: null,
+            actual_hours: null,
+            blocked_reason: newRow.description?.startsWith("BLOCKED:") ? newRow.description : null,
+            is_critical_path: false,
+            sort_order: 0,
+            created_at: newRow.created_at,
+            updated_at: newRow.updated_at,
+          }
+          const updatedTasks = { ...state.tasks, [projectId]: [...currentTasks, newTask] }
+          useAppStore.setState({ tasks: updatedTasks })
+          const workspaceId = state.user?.organizationId || "personal"
+          localStorage.setItem(`projtrack_tasks_${workspaceId}`, JSON.stringify(updatedTasks))
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "tasks", filter: `project_id=eq.${projectId}` },
+        (payload: any) => {
+          const taskId = payload.old?.id
+          if (!taskId) return
+          const state = useAppStore.getState()
+          const updatedTasks = {
+            ...state.tasks,
+            [projectId]: (state.tasks[projectId] || []).filter((t) => t.id !== taskId),
+          }
+          useAppStore.setState({ tasks: updatedTasks })
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [projectId])
+
   useEffect(() => {
     // Disable main container vertical scroll to prevent nested scroll warnings on Kanban
     const mainEl = document.querySelector("main")

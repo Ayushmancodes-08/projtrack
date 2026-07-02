@@ -272,6 +272,12 @@ const setupRealtimeSubscription = (supabase: any, workspaceId: string) => {
     )
     .subscribe((status: any) => {
       console.log(`Realtime channel status: ${status}`)
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        console.warn(`[Supabase Realtime] Subscription issue (${status}). Real-time updates via Supabase may be unavailable. Socket.io is the primary sync channel.`)
+      }
+      if (status === 'SUBSCRIBED') {
+        console.log(`[Supabase Realtime] Subscribed to workspace ${workspaceId} — listening for task/project changes.`)
+      }
     })
 }
 
