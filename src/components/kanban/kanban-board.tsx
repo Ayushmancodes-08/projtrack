@@ -302,7 +302,7 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
       </div>
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex gap-5 overflow-x-auto pb-6" style={{ minHeight: "calc(100vh - 280px)" }}>
+        <div className="flex gap-5 overflow-x-auto scrollbar-clean pb-6" style={{ minHeight: "calc(100vh - 280px)" }}>
           {statuses.map((status) => {
             const isBacklog = status.id === "backlog" || status.id === "planning" || status.id === "brief" || status.id === "question" || status.id === "not_started" || status.id === "idea"
             const isPlanned = status.id === "todo"
@@ -403,7 +403,7 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                       ref={provided.innerRef}
                       {...provided.droppableProps}
                       className={cn(
-                        "flex flex-col gap-3 px-3 py-4 flex-1 overflow-y-auto transition-all duration-200 min-h-[200px]",
+                        "flex flex-col gap-3 px-3 py-4 flex-1 overflow-y-auto scrollbar-clean transition-all duration-200 min-h-[200px]",
                         snapshot.isDraggingOver && "bg-navy/[0.03]"
                       )}
                     >

@@ -128,4 +128,30 @@
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
+  .scrollbar-clean {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color 0.3s;
+  }
+  .scrollbar-clean:hover {
+    scrollbar-color: rgba(156, 163, 175, 0.4) transparent;
+  }
+  .scrollbar-clean::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-clean::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-clean::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 9999px;
+    transition: background-color 0.3s;
+  }
+  .scrollbar-clean:hover::-webkit-scrollbar-thumb {
+    background: rgba(156, 163, 175, 0.4);
+  }
+  .scrollbar-clean::-webkit-scrollbar-thumb:hover {
+    background: rgba(156, 163, 175, 0.6);
+  }
 }
