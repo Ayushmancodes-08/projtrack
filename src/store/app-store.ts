@@ -2,6 +2,7 @@ import { create } from "zustand"
 import type { Project, Task, ProjectType, StatusConfig, Priority, HealthStatus } from "@/lib/types"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
+import { io } from "socket.io-client"
 
 export type AppNotification = {
   id: string

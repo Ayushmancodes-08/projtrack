@@ -37,6 +37,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { toast } from "sonner"
+import { useSocketRealtime } from "@/lib/use-socket-realtime"
 
 const viewIcons: Record<string, React.ElementType> = { kanban: Columns3, gantt: BarChart3, spreadsheet: Table2 }
 
@@ -52,6 +53,12 @@ export default function ProjectDetailPage() {
   
   const isAdmin = user ? !user.isTeamMember : false
   const userName = user?.fullName || user?.email || "Team Member"
+
+  // Socket.io real-time hook — keeps all open boards in sync
+  const { emitTaskStatusUpdate, emitTaskCreated, emitTaskDeleted } = useSocketRealtime({
+    projectId,
+    userName,
+  })
 
   const [view, setView] = useState<"kanban" | "gantt" | "spreadsheet">("kanban")
   
@@ -282,6 +289,15 @@ export default function ProjectDetailPage() {
     )
   }
 
+  // Wrap updateTaskStatus to also emit socket events for real-time sync
+  const updateTaskStatusWithSocket = async (pid: string, taskId: string, newStatus: string) => {
+    await updateTaskStatus(pid, taskId, newStatus)
+    // Find the task title for a meaningful toast on the receiver's end
+    const task = storeTasks[pid]?.find((t) => t.id === taskId)
+    const taskTitle = task?.title || "Task"
+    emitTaskStatusUpdate(taskId, newStatus, taskTitle)
+  }
+
   const template = getTemplate(project.project_type)
   const health = HEALTH_STATUSES.find((h) => h.value === project.health_status) || HEALTH_STATUSES[0]
   const projectTasks = storeTasks[project.id] || []
@@ -324,7 +340,7 @@ export default function ProjectDetailPage() {
 
     try {
       setIsCreatingTask(true)
-      await addTask(
+      const newTask = await addTask(
         project.id,
         taskTitle,
         taskPriority,
@@ -333,6 +349,8 @@ export default function ProjectDetailPage() {
         taskBlocked,
         defaultStatus
       )
+      // Notify other open boards about the new task via Socket.io
+      emitTaskCreated(newTask)
       toast.success("Task added to Kanban Board!")
       setIsTaskOpen(false)
       setTaskTitle("")
@@ -382,6 +400,8 @@ export default function ProjectDetailPage() {
     try {
       setIsDeletingTask(true)
       await deleteTask(project.id, editingTask.id)
+      // Notify other boards about deletion via Socket.io
+      emitTaskDeleted(editingTask.id)
       toast.success("Task deleted successfully!")
       setIsEditTaskOpen(false)
       setEditingTask(null)
@@ -500,7 +520,7 @@ export default function ProjectDetailPage() {
             statuses={statuses} 
             tasks={tasksByStatus}
             projectId={projectId}
-            updateTaskStatus={updateTaskStatus}
+            updateTaskStatus={updateTaskStatusWithSocket}
             onTaskClick={(taskId) => {
               if (isAdmin) {
                 const task = projectTasks.find(t => t.id === taskId)
