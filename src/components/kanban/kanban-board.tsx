@@ -315,7 +315,7 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
               <div 
                 key={status.id} 
                 className={cn(
-                  "flex w-72 shrink-0 flex-col rounded-2xl border transition-all duration-300 relative",
+                  "flex w-72 h-[calc(100vh-320px)] min-h-[480px] shrink-0 flex-col rounded-2xl border transition-all duration-300 relative",
                   showColumns 
                     ? cn("border-2 shadow-sm", borderColorMap[status.color] || "border-slate-200") 
                     : "border-slate-100 shadow-none",
@@ -403,7 +403,7 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                       ref={provided.innerRef}
                       {...provided.droppableProps}
                       className={cn(
-                        "flex flex-col gap-3 px-3 py-4 flex-1 transition-all duration-200 min-h-[200px]",
+                        "flex flex-col gap-3 px-3 py-4 flex-1 overflow-y-auto transition-all duration-200 min-h-[200px]",
                         snapshot.isDraggingOver && "bg-navy/[0.03]"
                       )}
                     >
