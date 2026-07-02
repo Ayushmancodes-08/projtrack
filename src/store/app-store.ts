@@ -170,7 +170,9 @@ const setupRealtimeSubscription = (supabase: any, workspaceId: string) => {
           }
           const index = updatedTasks[pid].findIndex(t => t.id === task.id)
           if (index > -1) {
-            updatedTasks[pid][index] = task
+            const newPidTasks = [...updatedTasks[pid]]
+            newPidTasks[index] = task
+            updatedTasks[pid] = newPidTasks
           } else {
             updatedTasks[pid] = [...updatedTasks[pid], task]
           }
