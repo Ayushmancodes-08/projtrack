@@ -302,7 +302,7 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
       </div>
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex gap-5 overflow-x-auto scrollbar-clean pb-6" style={{ height: "calc(100vh - 280px)" }}>
+        <div className="flex gap-5 overflow-x-auto scrollbar-clean pb-6 h-full">
           {statuses.map((status) => {
             const isBacklog = status.id === "backlog" || status.id === "planning" || status.id === "brief" || status.id === "question" || status.id === "not_started" || status.id === "idea"
             const isPlanned = status.id === "todo"

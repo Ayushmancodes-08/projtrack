@@ -530,8 +530,8 @@ export default function ProjectDetailPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col h-[calc(100vh-112px)] gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between flex-shrink-0">
           <div>
             <div className="flex flex-wrap items-center gap-2.5">
               <h1 className="text-2xl font-bold tracking-tight text-navy">{project.name}</h1>
@@ -597,7 +597,7 @@ export default function ProjectDetailPage() {
         </div>
 
         {/* Project Completion Score Bar */}
-        <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm flex flex-col gap-3">
+        <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm flex flex-col gap-3 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-xs font-semibold text-navy/70">Project Completion Status</span>
@@ -658,7 +658,7 @@ export default function ProjectDetailPage() {
           </div>
         </div>
 
-        <div className="inline-flex items-center rounded-lg bg-gray-100/80 p-1 shadow-sm">
+        <div className="inline-flex items-center rounded-lg bg-gray-100/80 p-1 shadow-sm flex-shrink-0 w-fit">
           {(["kanban", "gantt", "spreadsheet"] as const).map((v) => {
             const Icon = viewIcons[v]
             return (
@@ -680,53 +680,58 @@ export default function ProjectDetailPage() {
         </div>
 
         {view === "kanban" && (
-          <KanbanBoard 
-            statuses={statuses} 
-            tasks={tasksByStatus}
-            projectId={projectId}
-            updateTaskStatus={updateTaskStatusWithSocket}
-            onTaskClick={(taskId) => {
-              if (isAdmin) {
-                const task = projectTasks.find(t => t.id === taskId)
-                if (task) {
-                  setEditingTask(task)
-                  setEditTaskTitle(task.title)
-                  setEditTaskPriority(task.priority)
-                  setEditTaskAssignee(task.assignee_id || "")
-                  
-                  let dateVal = ""
-                  if (task.due_date) {
-                    try {
-                      const d = new Date(task.due_date)
-                      if (!isNaN(d.getTime())) {
+          <div className="flex-1 min-h-0">
+            <KanbanBoard 
+              statuses={statuses} 
+              tasks={tasksByStatus}
+              projectId={projectId}
+              updateTaskStatus={updateTaskStatusWithSocket}
+              onTaskClick={(taskId) => {
+                if (isAdmin) {
+                  const task = projectTasks.find(t => t.id === taskId)
+                  if (task) {
+                    setEditingTask(task)
+                    setEditTaskTitle(task.title)
+                    setEditTaskPriority(task.priority)
+                    setEditTaskAssignee(task.assignee_id || "")
+                    
+                    let dateVal = ""
+                    if (task.due_date) {
+                      try {
+                        const d = new Date(task.due_date)
                         dateVal = d.toISOString().split("T")[0]
-                      }
-                    } catch (e) {
-                      console.error(e)
+                      } catch {}
                     }
+                    setEditTaskDueDate(dateVal)
+                    setEditTaskStatus(task.status || "todo")
+                    setIsEditTaskOpen(true)
                   }
-                  setEditTaskDueDate(dateVal)
-                  setEditTaskBlocked(!!task.blocked_reason)
-                  setEditTaskStatus(task.status || "todo")
-                  setIsEditTaskOpen(true)
+                } else {
+                  toast.info("Only administrators (workspace owners) can edit or delete tasks.")
                 }
-              } else {
-                toast.info("Only administrators (workspace owners) can edit or delete tasks.")
-              }
-            }}
-            onAddTask={handleAddTaskForStatus}
-            isAdmin={isAdmin}
-            userName={userName}
-            addNotification={addNotification}
-            onUpdateColumns={useAppStore.getState().updateProjectColumns}
-            userEmail={user?.email || ""}
-            isTeamMember={user?.isTeamMember || false}
-          />
+              }}
+              onAddTask={handleAddTaskForStatus}
+              isAdmin={isAdmin}
+              userName={userName}
+              addNotification={addNotification}
+              onUpdateColumns={useAppStore.getState().updateProjectColumns}
+              userEmail={user?.email || ""}
+              isTeamMember={user?.isTeamMember || false}
+            />
+          </div>
         )}
         {/* BUG-008 FIXED: Pass projectId to GanttChart */}
-        {view === "gantt" && <GanttChart projectId={projectId} />}
+        {view === "gantt" && (
+          <div className="flex-1 min-h-0">
+            <GanttChart projectId={projectId} />
+          </div>
+        )}
         {/* BUG-007 FIXED: Pass projectId to SpreadsheetView */}
-        {view === "spreadsheet" && <SpreadsheetView projectId={projectId} />}
+        {view === "spreadsheet" && (
+          <div className="flex-1 min-h-0">
+            <SpreadsheetView projectId={projectId} />
+          </div>
+        )}
       </div>
 
       {/* Add Task Modal */}
