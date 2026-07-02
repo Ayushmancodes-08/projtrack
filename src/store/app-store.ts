@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import type { Project, Task, ProjectType, StatusConfig, Priority, HealthStatus } from "@/lib/types"
 import { createClient } from "@/lib/supabase/client"
+import { toast } from "sonner"
 
 export type AppNotification = {
   id: string
@@ -146,14 +147,30 @@ const mapDbNotificationToNotification = (n: any): AppNotification => {
 }
 
 let activeRealtimeChannel: any = null
+let activeRealtimeWorkspaceId: string | null = null
+let activeSupabaseClient: any = null
 
 const setupRealtimeSubscription = (supabase: any, workspaceId: string) => {
-  if (activeRealtimeChannel) {
+  if (activeRealtimeChannel && activeRealtimeWorkspaceId === workspaceId && activeSupabaseClient === supabase) {
     return
   }
 
+  if (activeRealtimeChannel) {
+    try {
+      activeRealtimeChannel.unsubscribe()
+      if (activeSupabaseClient) {
+        activeSupabaseClient.removeChannel(activeRealtimeChannel)
+      }
+    } catch (e) {
+      console.warn("Failed to unsubscribe/remove old realtime channel", e)
+    }
+  }
+
+  activeRealtimeWorkspaceId = workspaceId
+  activeSupabaseClient = supabase
+
   activeRealtimeChannel = supabase
-    .channel('db-changes')
+    .channel(`db-changes-${workspaceId}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'tasks' },
@@ -185,6 +202,12 @@ const setupRealtimeSubscription = (supabase: any, workspaceId: string) => {
 
         useAppStore.setState({ tasks: updatedTasks })
         localStorage.setItem(`projtrack_tasks_${workspaceId}`, JSON.stringify(updatedTasks))
+        
+        if (eventType === 'DELETE') {
+          toast.info("A task was deleted from the board.")
+        } else {
+          toast.info(`Task Board updated: "${newRow?.title || 'a task'}" is now in ${newRow?.status || 'updated'}`)
+        }
       }
     )
     .on(
@@ -246,7 +269,9 @@ const setupRealtimeSubscription = (supabase: any, workspaceId: string) => {
         localStorage.setItem(`projtrack_notifications_${workspaceId}`, JSON.stringify(updatedNotifications))
       }
     )
-    .subscribe()
+    .subscribe((status: any) => {
+      console.log(`Realtime channel status: ${status}`)
+    })
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
