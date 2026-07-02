@@ -20,7 +20,7 @@ let globalSocket: Socket | null = null
 const joinedProjectRooms = new Set<string>()
 
 function getSocket(): Socket {
-  if (!globalSocket || !globalSocket.connected) {
+  if (!globalSocket) {
     globalSocket = io({
       path: "/api/socket",
       addTrailingSlash: false,
@@ -171,16 +171,19 @@ export function useSocketRealtime({ projectId, userName = "Someone" }: UseSocket
       joinedProjectRooms.add(projectId)
     }
 
-    socket.on("connect", () => {
+    const handleConnect = () => {
       console.log(`[Socket.io] Connected: ${socket.id}`)
       // joinRoom is already handled by the global reconnect handler in getSocket()
       // but call again here to be safe on the first connection
       joinRoom()
-    })
+    }
 
-    socket.on("disconnect", (reason) => {
+    const handleDisconnect = (reason: string) => {
       console.log(`[Socket.io] Disconnected: ${reason}`)
-    })
+    }
+
+    socket.on("connect", handleConnect)
+    socket.on("disconnect", handleDisconnect)
 
     // Handle incoming task status change from another user
     const handleTaskStatusChanged = (payload: TaskStatusChangedPayload) => {
@@ -258,7 +261,8 @@ export function useSocketRealtime({ projectId, userName = "Someone" }: UseSocket
     return () => {
       joinedProjectRooms.delete(projectId)
       socket.emit("leave-project", projectId)
-      socket.off("connect", joinRoom)
+      socket.off("connect", handleConnect)
+      socket.off("disconnect", handleDisconnect)
       socket.off("task-status-changed", handleTaskStatusChanged)
       socket.off("task-added", handleTaskAdded)
       socket.off("task-removed", handleTaskRemoved)

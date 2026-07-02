@@ -12,7 +12,7 @@ import { toast } from "sonner"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Trash2, ArrowUp, ArrowDown } from "lucide-react"
+import { Trash2, ArrowUp, ArrowDown, Check } from "lucide-react"
 
 type KanbanTask = {
   id: string
@@ -463,6 +463,28 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                                 <p className="mt-2 text-xs font-semibold leading-snug text-navy/90">
                                   {task.title}
                                 </p>
+
+                                {isAdmin && (status.category === "review" || status.id === "review" || status.id === "finishing" || status.id === "finalizing") && (
+                                  <div className="mt-3 pt-2.5 border-t border-dashed border-slate-100 flex justify-end">
+                                    <Button
+                                      size="xs"
+                                      onClick={async (e) => {
+                                        e.stopPropagation()
+                                        const doneStatusId = statuses.find((s) => s.category === "done")?.id || "done"
+                                        try {
+                                          await updateTaskStatus(projectId, task.id, doneStatusId)
+                                          toast.success(`Task "${task.title}" verified & completed!`)
+                                        } catch (err) {
+                                          toast.error("Failed to complete task")
+                                        }
+                                      }}
+                                      className="bg-green-600 hover:bg-green-700 text-white text-[10px] h-6 px-2 font-medium flex items-center gap-1 rounded border-0 cursor-pointer"
+                                    >
+                                      <Check className="h-3 w-3" />
+                                      Verified & Mark as Complete
+                                    </Button>
+                                  </div>
+                                )}
                                 
                                 <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5">
                                   <div className="flex items-center gap-1.5">

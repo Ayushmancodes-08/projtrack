@@ -23,7 +23,8 @@ import {
   FolderOpen,
   Trash2,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Check
 } from "lucide-react"
 import { KanbanBoard } from "@/components/kanban/kanban-board"
 import { GanttChart } from "@/components/gantt/gantt-chart"
@@ -397,6 +398,13 @@ export default function ProjectDetailPage() {
   const projectTasks = storeTasks[project.id] || []
   const statuses: StatusConfig[] = project.status_config.length > 0 ? project.status_config : template.defaultStatuses
 
+  const totalTasks = projectTasks.length
+  const completedTasks = projectTasks.filter((t) => {
+    const taskStatus = statuses.find((s) => s.id === t.status)
+    return taskStatus?.category === "done" || t.status === "done" || t.status === "completed"
+  }).length
+  const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+
   // Group tasks by status for the Kanban board view
   const tasksByStatus: Record<string, { id: string; title: string; priority?: string; assignee?: string; dueDate?: string; comments: number; attachments: number; blocked: boolean }[]> = {}
   statuses.forEach((s) => {
@@ -585,6 +593,68 @@ export default function ProjectDetailPage() {
                 </Button>
               </>
             )}
+          </div>
+        </div>
+
+        {/* Project Completion Score Bar */}
+        <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-xs font-semibold text-navy/70">Project Completion Status</span>
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-bold text-navy">{completionPercentage}%</span>
+                <span className="text-xs text-muted-foreground">({completedTasks} of {totalTasks} tasks completed)</span>
+              </div>
+            </div>
+            
+            {/* Admin Only: Mark Project as Completed */}
+            {isAdmin && (
+              <div>
+                {project.is_completed ? (
+                  <Badge className="bg-green-100 text-green-800 hover:bg-green-100/80 border-0 flex items-center gap-1 py-1.5 px-3 rounded-lg text-xs font-bold">
+                    <Check className="h-3.5 w-3.5" />
+                    Project Completed
+                  </Badge>
+                ) : (
+                  completedTasks > 0 && completedTasks === totalTasks && (
+                    <Button
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const { updateProjectDetails } = useAppStore.getState()
+                          await updateProjectDetails(
+                            project.id,
+                            project.name,
+                            project.description || "",
+                            project.deadline || "",
+                            project.health_status,
+                            true // mark completed
+                          )
+                          toast.success("Project marked as completed successfully!")
+                        } catch {
+                          toast.error("Failed to mark project as completed")
+                        }
+                      }}
+                      className="bg-green-600 hover:bg-green-700 text-white text-xs font-semibold shadow-sm border-0 cursor-pointer h-9 px-4 rounded-lg flex items-center gap-1.5"
+                    >
+                      <Check className="h-4 w-4" />
+                      Mark Project as Completed
+                    </Button>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+          
+          {/* Progress Bar Track */}
+          <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all duration-500",
+                completionPercentage === 100 ? "bg-green-500" : "bg-gradient-to-r from-gold to-gold-dark"
+              )}
+              style={{ width: `${completionPercentage}%` }}
+            />
           </div>
         </div>
 
