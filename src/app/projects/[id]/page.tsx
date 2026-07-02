@@ -680,7 +680,7 @@ export default function ProjectDetailPage() {
         </div>
 
         {view === "kanban" && (
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 flex flex-col">
             <KanbanBoard 
               statuses={statuses} 
               tasks={tasksByStatus}
@@ -722,13 +722,13 @@ export default function ProjectDetailPage() {
         )}
         {/* BUG-008 FIXED: Pass projectId to GanttChart */}
         {view === "gantt" && (
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 flex flex-col">
             <GanttChart projectId={projectId} />
           </div>
         )}
         {/* BUG-007 FIXED: Pass projectId to SpreadsheetView */}
         {view === "spreadsheet" && (
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 flex flex-col">
             <SpreadsheetView projectId={projectId} />
           </div>
         )}
