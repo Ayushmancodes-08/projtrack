@@ -142,6 +142,8 @@ export default function DashboardPage() {
       }))
   })
 
+  const totalBlockedTasks = blockedTasksList.length
+
   const riskProjectsList = projects
     .filter((p) => p.health_status !== "ON_TRACK")
     .map((p) => ({
