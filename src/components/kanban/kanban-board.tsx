@@ -205,85 +205,159 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
     }))
   }
 
+  // Tooltip/hover state for Kanban overlay controls and signals
+  const [hoveredOverlay, setHoveredOverlay] = useState<string | null>(null)
+  const [hoveredTaskSignal, setHoveredTaskSignal] = useState<string | null>(null)
+
   return (
-    <div className="space-y-6 flex flex-col h-full min-h-0">
+    <div className="space-y-5 flex flex-col h-full min-h-0">
       {/* Kanban Interactive Principles Panel / Legend */}
-      <div className="flex flex-col gap-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm flex-shrink-0">
+      <div className="flex flex-col gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Eye className="h-4 w-4 text-navy" />
-            <h3 className="text-sm font-semibold text-navy">Kanban Framework Overlay Controls</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-navy">Kanban Framework Overlay Controls</h3>
           </div>
           <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-            <HelpCircle className="h-3 w-3" /> Click elements to toggle their visualization on the board
+            <HelpCircle className="h-3 w-3 text-gold-dark" /> Click or hover to inspect framework indicators
           </span>
         </div>
         
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={() => setShowVisualSignals(!showVisualSignals)}
-            className={cn(
-              "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all shadow-sm",
-              showVisualSignals 
-                ? "border-red-200 bg-red-50 text-red-700" 
-                : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-            )}
+        <div className="flex flex-wrap items-center gap-2.5 relative">
+          <div
+            className="relative"
+            onMouseEnter={() => setHoveredOverlay("visual_signals")}
+            onMouseLeave={() => setHoveredOverlay(null)}
           >
-            <span className={cn("h-3 w-3 rounded-full border-2", showVisualSignals ? "bg-red-500 border-red-200" : "bg-slate-300 border-white")} />
-            Visual signals
-          </button>
+            <button
+              onClick={() => setShowVisualSignals(!showVisualSignals)}
+              className={cn(
+                "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer",
+                showVisualSignals 
+                  ? "border-red-200 bg-red-50 text-red-700 ring-1 ring-red-300/50" 
+                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+              )}
+            >
+              <span className={cn("h-3 w-3 rounded-full border-2", showVisualSignals ? "bg-red-500 border-red-200 animate-pulse" : "bg-slate-300 border-white")} />
+              Visual signals
+            </button>
+            {hoveredOverlay === "visual_signals" && (
+              <div className="absolute top-full left-0 mt-2 w-64 z-50 rounded-xl bg-navy p-3 text-white shadow-xl text-[11px] animate-in fade-in-0 zoom-in-95">
+                <p className="font-bold text-gold">🔴 Visual Signals</p>
+                <p className="text-slate-200 mt-1 leading-snug">
+                  Highlights blocked tasks or critical bottlenecks with prominent red visual badges so team members immediately notice stuck work.
+                </p>
+              </div>
+            )}
+          </div>
 
-          <button
-            onClick={() => setShowColumns(!showColumns)}
-            className={cn(
-              "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all shadow-sm",
-              showColumns 
-                ? "border-amber-200 bg-amber-50 text-amber-700" 
-                : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-            )}
+          <div
+            className="relative"
+            onMouseEnter={() => setHoveredOverlay("columns")}
+            onMouseLeave={() => setHoveredOverlay(null)}
           >
-            <span className={cn("h-3 w-3 rounded-full border-2", showColumns ? "bg-amber-500 border-amber-200" : "bg-slate-300 border-white")} />
-            Columns
-          </button>
+            <button
+              onClick={() => setShowColumns(!showColumns)}
+              className={cn(
+                "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer",
+                showColumns 
+                  ? "border-amber-200 bg-amber-50 text-amber-700" 
+                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+              )}
+            >
+              <span className={cn("h-3 w-3 rounded-full border-2", showColumns ? "bg-amber-500 border-amber-200" : "bg-slate-300 border-white")} />
+              Columns
+            </button>
+            {hoveredOverlay === "columns" && (
+              <div className="absolute top-full left-0 mt-2 w-64 z-50 rounded-xl bg-navy p-3 text-white shadow-xl text-[11px] animate-in fade-in-0 zoom-in-95">
+                <p className="font-bold text-amber-300">📋 Workflow Columns</p>
+                <p className="text-slate-200 mt-1 leading-snug">
+                  Visualizes each distinct state of work (e.g. Planning, In Progress, Review, Done) representing value stream flow.
+                </p>
+              </div>
+            )}
+          </div>
 
-          <button
-            onClick={() => setShowWipLimits(!showWipLimits)}
-            className={cn(
-              "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all shadow-sm",
-              showWipLimits 
-                ? "border-purple-200 bg-purple-50 text-purple-700" 
-                : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-            )}
+          <div
+            className="relative"
+            onMouseEnter={() => setHoveredOverlay("wip_limits")}
+            onMouseLeave={() => setHoveredOverlay(null)}
           >
-            <span className={cn("h-3 w-3 rounded-full border-2", showWipLimits ? "bg-purple-500 border-purple-200" : "bg-slate-300 border-white")} />
-            Work-in-progress limit
-          </button>
+            <button
+              onClick={() => setShowWipLimits(!showWipLimits)}
+              className={cn(
+                "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer",
+                showWipLimits 
+                  ? "border-purple-200 bg-purple-50 text-purple-700" 
+                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+              )}
+            >
+              <span className={cn("h-3 w-3 rounded-full border-2", showWipLimits ? "bg-purple-500 border-purple-200" : "bg-slate-300 border-white")} />
+              Work-in-progress limit
+            </button>
+            {hoveredOverlay === "wip_limits" && (
+              <div className="absolute top-full left-0 mt-2 w-64 z-50 rounded-xl bg-navy p-3 text-white shadow-xl text-[11px] animate-in fade-in-0 zoom-in-95">
+                <p className="font-bold text-purple-300">⚡ WIP (Work-In-Progress) Limits</p>
+                <p className="text-slate-200 mt-1 leading-snug">
+                  Restricts maximum active tasks per stage to prevent multitasking and eliminate workflow traffic jams.
+                </p>
+              </div>
+            )}
+          </div>
 
-          <button
-            onClick={() => setShowCommitment(!showCommitment)}
-            className={cn(
-              "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all shadow-sm",
-              showCommitment 
-                ? "border-teal-200 bg-teal-50 text-teal-700" 
-                : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-            )}
+          <div
+            className="relative"
+            onMouseEnter={() => setHoveredOverlay("commitment")}
+            onMouseLeave={() => setHoveredOverlay(null)}
           >
-            <span className={cn("h-3 w-3 rounded-full border-2", showCommitment ? "bg-teal-500 border-teal-200" : "bg-slate-300 border-white")} />
-            Commitment point
-          </button>
+            <button
+              onClick={() => setShowCommitment(!showCommitment)}
+              className={cn(
+                "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer",
+                showCommitment 
+                  ? "border-teal-200 bg-teal-50 text-teal-700" 
+                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+              )}
+            >
+              <span className={cn("h-3 w-3 rounded-full border-2", showCommitment ? "bg-teal-500 border-teal-200" : "bg-slate-300 border-white")} />
+              Commitment point
+            </button>
+            {hoveredOverlay === "commitment" && (
+              <div className="absolute top-full left-0 mt-2 w-64 z-50 rounded-xl bg-navy p-3 text-white shadow-xl text-[11px] animate-in fade-in-0 zoom-in-95">
+                <p className="font-bold text-teal-300">🎯 Commitment Point</p>
+                <p className="text-slate-200 mt-1 leading-snug">
+                  The boundary where an idea or backlog item is formally committed by the team for development.
+                </p>
+              </div>
+            )}
+          </div>
 
-          <button
-            onClick={() => setShowDelivery(!showDelivery)}
-            className={cn(
-              "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all shadow-sm",
-              showDelivery 
-                ? "border-green-200 bg-green-50 text-green-700" 
-                : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-            )}
+          <div
+            className="relative"
+            onMouseEnter={() => setHoveredOverlay("delivery")}
+            onMouseLeave={() => setHoveredOverlay(null)}
           >
-            <span className={cn("h-3 w-3 rounded-full border-2", showDelivery ? "bg-green-500 border-green-200" : "bg-slate-300 border-white")} />
-            Delivery point
-          </button>
+            <button
+              onClick={() => setShowDelivery(!showDelivery)}
+              className={cn(
+                "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer",
+                showDelivery 
+                  ? "border-green-200 bg-green-50 text-green-700" 
+                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+              )}
+            >
+              <span className={cn("h-3 w-3 rounded-full border-2", showDelivery ? "bg-green-500 border-green-200" : "bg-slate-300 border-white")} />
+              Delivery point
+            </button>
+            {hoveredOverlay === "delivery" && (
+              <div className="absolute top-full left-0 mt-2 w-64 z-50 rounded-xl bg-navy p-3 text-white shadow-xl text-[11px] animate-in fade-in-0 zoom-in-95">
+                <p className="font-bold text-green-300">🚀 Delivery Point</p>
+                <p className="text-slate-200 mt-1 leading-snug">
+                  The final completed stage where completed work is delivered, released, and closed.
+                </p>
+              </div>
+            )}
+          </div>
 
           {isAdmin && onUpdateColumns && (
             <Button
@@ -302,7 +376,7 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
       </div>
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex gap-5 overflow-x-auto scrollbar-clean pb-6 flex-1 min-h-0">
+        <div className="flex gap-5 overflow-x-auto scrollbar-clean pb-8 flex-1 min-h-0 items-stretch">
           {statuses.map((status) => {
             const isBacklog = status.id === "backlog" || status.id === "planning" || status.id === "brief" || status.id === "question" || status.id === "not_started" || status.id === "idea"
             const isPlanned = status.id === "todo"
@@ -315,9 +389,9 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
               <div 
                 key={status.id} 
                 className={cn(
-                  "flex w-72 h-full shrink-0 flex-col rounded-2xl border transition-all duration-300 relative",
+                  "flex w-84 min-w-[320px] max-w-[360px] h-full shrink-0 flex-col rounded-2xl border transition-all duration-300 relative shadow-sm",
                   showColumns 
-                    ? cn("border-2 shadow-sm", borderColorMap[status.color] || "border-slate-200") 
+                    ? cn("border-2", borderColorMap[status.color] || "border-slate-200") 
                     : "border-slate-100 shadow-none",
                   showColumns 
                     ? columnColorAccentMap[status.color] || "bg-slate-50/50" 
@@ -350,32 +424,37 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                 )}
 
                 {/* Column Header */}
-                <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-100">
+                <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-100 bg-white/60 backdrop-blur-xs rounded-t-2xl">
                   <div className="flex items-center gap-2.5 w-full">
                     {/* Status Color Badge/Dot */}
                     <div className={cn("h-3 w-3 rounded-full ring-2 ring-white", bgColorMap[status.color] || "bg-slate-400")} />
                     
-                    <div className="flex flex-col">
-                      <span className="text-xs font-bold uppercase tracking-wider text-navy/90">
-                        {status.label}
-                      </span>
+                    <div className="flex flex-col flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold uppercase tracking-wider text-navy/90">
+                          {status.label}
+                        </span>
+                        <span className="text-[11px] font-semibold text-muted-foreground bg-slate-100 px-2 py-0.5 rounded-full">
+                          {colTasks.length} {colTasks.length === 1 ? "task" : "tasks"}
+                        </span>
+                      </div>
                       
                       {/* WIP Limit Display and Configurator */}
                       {showWipLimits && (
-                        <div className="flex items-center gap-1 mt-0.5">
+                        <div className="flex items-center gap-1 mt-1">
                           {isBacklog ? (
-                            <span className="inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.2 text-[9px] font-bold text-slate-600 shadow-xs">
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-600 shadow-xs">
                               WIP: {colTasks.length} (Infinite)
                             </span>
                           ) : (
                             <>
                               <span className={cn(
-                                "inline-flex items-center rounded-full px-1.5 py-0.2 text-[9px] font-bold shadow-xs",
+                                "inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold shadow-xs",
                                 isWipExceeded
                                   ? "bg-red-100 text-red-700 animate-bounce"
                                   : "bg-purple-100 text-purple-800"
                               )}>
-                                WIP: {colTasks.length}/{currentWipLimit}
+                                WIP Limit: {colTasks.length}/{currentWipLimit}
                               </span>
                               <input
                                 type="number"
@@ -383,7 +462,7 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                                 max="20"
                                 value={currentWipLimit}
                                 onChange={(e) => updateWipLimit(status.id, parseInt(e.target.value) || 1)}
-                                className="w-8 h-4 text-[9px] border rounded bg-white text-center focus:outline-none text-slate-600 font-semibold"
+                                className="w-9 h-4 text-[9px] border rounded bg-white text-center focus:outline-none text-slate-600 font-semibold cursor-pointer"
                                 title="Edit WIP Limit"
                               />
                             </>
@@ -392,8 +471,6 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                       )}
                     </div>
                   </div>
-                  
-                  {/* Plus button removed as columns are not assigned to users */}
                 </div>
 
                 {/* Droppable Area for tasks */}
@@ -404,7 +481,7 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                         ref={provided.innerRef}
                         {...provided.droppableProps}
                         className={cn(
-                          "flex flex-col gap-3 px-3 py-4 flex-1 overflow-y-auto scrollbar-clean transition-all duration-200 min-h-[200px]",
+                          "flex flex-col gap-3.5 p-3.5 flex-1 overflow-y-auto scrollbar-clean transition-all duration-200 min-h-[350px]",
                           snapshot.isDraggingOver && "bg-navy/[0.03]"
                         )}
                       >
@@ -426,19 +503,48 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                                 style={provided.draggableProps.style as React.CSSProperties}
                                 onClick={() => onTaskClick?.(task.id)}
                                 className={cn(
-                                  "group relative rounded-xl border bg-white p-3.5 transition-all duration-150 cursor-pointer shadow-sm hover:shadow-md",
+                                  "group relative rounded-xl border bg-white p-4 transition-all duration-200 cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-0.5",
                                   snapshot.isDragging
-                                    ? "shadow-elevated rotate-1 scale-[1.02]"
+                                    ? "shadow-elevated rotate-1 scale-[1.02] ring-2 ring-gold"
                                     : "border-slate-200/80 hover:border-slate-300",
                                   // Visual Signal: Red border and highlight indicator if active and task is blocked/critical
                                   hasVisualSignal && "border-red-400 ring-2 ring-red-100 bg-red-50/10",
                                   // Dull mode for other members' tasks
-                                  isDragDisabled && "opacity-45 hover:opacity-50"
+                                  isDragDisabled && "opacity-60 hover:opacity-80"
                                 )}
                               >
-                                {/* Red visual signal circle in card corner */}
+                                {/* Red visual signal circle in card corner with hover reason */}
                                 {hasVisualSignal && (
-                                  <div className="absolute -top-1.5 -right-1.5 h-3.5 w-3.5 rounded-full bg-red-500 border-2 border-white shadow-sm" />
+                                  <div
+                                    className="absolute -top-1.5 -right-1.5"
+                                    onMouseEnter={(e) => {
+                                      e.stopPropagation()
+                                      setHoveredTaskSignal(task.id)
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.stopPropagation()
+                                      setHoveredTaskSignal(null)
+                                    }}
+                                  >
+                                    <span className="relative flex h-4 w-4">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                                      <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 border-2 border-white shadow-xs" />
+                                    </span>
+
+                                    {hoveredTaskSignal === task.id && (
+                                      <div className="absolute right-0 top-full mt-1.5 w-60 z-50 rounded-xl bg-navy p-3 text-white shadow-2xl text-[10px] animate-in fade-in-0 zoom-in-95">
+                                        <p className="font-bold text-red-400 flex items-center gap-1">
+                                          <AlertCircle className="h-3 w-3" />
+                                          Visual Signal / Blocker
+                                        </p>
+                                        <p className="mt-1 text-slate-200 leading-snug">
+                                          {task.blocked
+                                            ? "This task is blocked by external dependencies or blockers. PM intervention is required."
+                                            : "Marked as CRITICAL priority. Needs immediate attention to avoid project delays."}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
                                 )}
 
                                 <div className="flex items-start justify-between gap-2">
@@ -446,7 +552,7 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                                     <Badge
                                       variant="outline"
                                       className={cn(
-                                        "text-[9px] font-semibold tracking-wide px-1.5 py-0 h-4",
+                                        "text-[9px] font-semibold tracking-wide px-2 py-0.5 h-4.5",
                                         priority.color
                                       )}
                                     >
@@ -454,14 +560,14 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                                     </Badge>
                                   )}
                                   {task.blocked && (
-                                    <span className="flex items-center gap-1 text-[9px] font-bold text-red-600 bg-red-100/50 px-1.5 py-0.5 rounded">
-                                      <AlertCircle className="h-3 w-3 text-red-500" />
+                                    <span className="flex items-center gap-1 text-[9px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">
+                                      <AlertCircle className="h-3 w-3 text-red-600" />
                                       Blocked
                                     </span>
                                   )}
                                 </div>
                                 
-                                <p className="mt-2 text-xs font-semibold leading-snug text-navy/90">
+                                <p className="mt-2.5 text-xs font-semibold leading-normal text-navy line-clamp-3">
                                   {task.title}
                                 </p>
 
@@ -487,34 +593,29 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                                   </div>
                                 )}
                                 
-                                <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5">
-                                  <div className="flex items-center gap-1.5">
+                                <div className="mt-3.5 flex items-center justify-between border-t border-slate-100 pt-2.5 text-xs">
+                                  <div className="flex items-center gap-2">
                                     {task.assignee ? (
-                                      <Avatar className="h-5 w-5 ring-1 ring-white">
-                                        <AvatarFallback className="text-[7px] font-semibold bg-navy/10 text-navy/70">
+                                      <div className="flex items-center gap-1.5">
+                                        <Avatar className="h-5 w-5 ring-1 ring-slate-200">
+                                          <AvatarFallback className="text-[7px] font-semibold bg-navy/10 text-navy">
+                                            {task.assignee.substring(0, 2).toUpperCase()}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <span className="text-[10px] text-muted-foreground font-medium truncate max-w-[110px]">
                                           {task.assignee}
-                                        </AvatarFallback>
-                                      </Avatar>
+                                        </span>
+                                      </div>
                                     ) : (
-                                      <div className="h-5 w-5 rounded-full bg-slate-100 border border-slate-200" />
+                                      <span className="text-[10px] text-muted-foreground/60 italic">Unassigned</span>
                                     )}
                                   </div>
                                   
-                                  <div className="flex items-center gap-2.5 text-[10px] text-slate-500">
-                                    {task.comments !== undefined && task.comments > 0 && (
-                                      <span className="flex items-center gap-0.5">
-                                        <MessageSquare className="h-3 w-3" />
-                                        {task.comments}
-                                      </span>
-                                    )}
-                                    {task.attachments !== undefined && task.attachments > 0 && (
-                                      <span className="flex items-center gap-0.5">
-                                        <Paperclip className="h-3 w-3" />
-                                        {task.attachments}
-                                      </span>
-                                    )}
+                                  <div className="flex items-center gap-2 text-[10px] text-slate-500">
                                     {task.dueDate && (
-                                      <span className="font-semibold text-slate-600">{task.dueDate}</span>
+                                      <span className="font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                                        {task.dueDate}
+                                      </span>
                                     )}
                                   </div>
                                 </div>

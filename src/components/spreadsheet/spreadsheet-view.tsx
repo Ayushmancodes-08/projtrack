@@ -31,7 +31,6 @@ export function SpreadsheetView({ projectId }: SpreadsheetViewProps) {
     status: t.status,
     priority: t.priority,
     dueDate: t.due_date || "—",
-    milestone: "—",
   }))
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -104,7 +103,7 @@ export function SpreadsheetView({ projectId }: SpreadsheetViewProps) {
               <TableHead className="w-10">
                 <Checkbox checked={filteredRows.length > 0 && selected.size === filteredRows.length} onCheckedChange={toggleAll} />
               </TableHead>
-              {["Task", "Assignee", "Status", "Priority", "Due Date", "Milestone"].map((col) => (
+              {["Task", "Assignee", "Status", "Priority", "Due Date"].map((col) => (
                 <TableHead key={col} className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
                   <span className="inline-flex items-center gap-1 cursor-pointer hover:text-navy transition-colors">
                     {col} <ArrowUpDown className="h-3 w-3" />
@@ -116,7 +115,7 @@ export function SpreadsheetView({ projectId }: SpreadsheetViewProps) {
           <TableBody>
             {filteredRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-xs text-muted-foreground">
+                <TableCell colSpan={6} className="text-center py-8 text-xs text-muted-foreground">
                   No tasks match &ldquo;{searchQuery}&rdquo;
                 </TableCell>
               </TableRow>
@@ -151,7 +150,6 @@ export function SpreadsheetView({ projectId }: SpreadsheetViewProps) {
                       )}
                     </TableCell>
                     <TableCell className="text-xs font-medium text-muted-foreground">{row.dueDate}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{row.milestone}</TableCell>
                   </TableRow>
                 )
               })

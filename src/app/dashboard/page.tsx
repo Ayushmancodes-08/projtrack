@@ -130,11 +130,37 @@ export default function DashboardPage() {
     return acc + projectTasks.length
   }, 0)
 
-  const totalBlockedTasks = projects.reduce((acc, project) => {
+  const blockedTasksList = projects.flatMap((project) => {
     const projectTasks = tasks[project.id] || []
-    return acc + projectTasks.filter(
-      (t) => t.status !== "done" && (t.blocked_reason || t.priority === "CRITICAL")
-    ).length
+    return projectTasks
+      .filter((t) => t.status !== "done" && (t.blocked_reason || t.priority === "CRITICAL"))
+      .map((t) => ({
+        title: t.title,
+        subtitle: `Project: ${project.name} · Assignee: ${t.assignee_id || "Unassigned"}`,
+        badge: t.blocked_reason ? "Blocked" : "Critical",
+        badgeColor: t.blocked_reason ? "bg-red-100 text-red-700" : "bg-gold/20 text-gold-dark",
+      }))
+  })
+
+  const riskProjectsList = projects
+    .filter((p) => p.health_status !== "ON_TRACK")
+    .map((p) => ({
+      title: p.name,
+      subtitle: `Deadline: ${p.deadline || "No deadline"}`,
+      badge: p.health_status.replace(/_/g, " "),
+      badgeColor: p.health_status === "AT_RISK" ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700",
+    }))
+
+  const activeProjectsList = projects.map((p) => ({
+    title: p.name,
+    subtitle: `Type: ${p.project_type} · Health: ${p.health_status.replace(/_/g, " ")}`,
+    badge: p.health_status.replace(/_/g, " "),
+    badgeColor: p.health_status === "ON_TRACK" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700",
+  }))
+
+  const completedTasksCount = projects.reduce((acc, project) => {
+    const projectTasks = tasks[project.id] || []
+    return acc + projectTasks.filter((t) => t.status === "done" || t.status === "completed").length
   }, 0)
 
   return (
@@ -154,6 +180,9 @@ export default function DashboardPage() {
             trend="neutral"
             trendLabel="Across all categories"
             icon={FolderKanban}
+            signalType="active"
+            explanation="Active Projects shows all ongoing workspaces being tracked. It gives high-level visibility into multiple team workstreams."
+            items={activeProjectsList}
           />
           <KPICard
             title="Projects At Risk"
@@ -162,14 +191,23 @@ export default function DashboardPage() {
             trendLabel="Requires attention"
             icon={AlertTriangle}
             accent="bg-gold/10"
+            signalType="risk"
+            explanation="Projects at Risk are workspaces with overdue milestones, high blocker density, or flagged health status requiring PM intervention."
+            items={riskProjectsList}
           />
           <KPICard
             title="Total Workspace Tasks"
             value={String(totalTasks)}
             trend="neutral"
-            trendLabel="Across all boards"
+            trendLabel={`${completedTasksCount} of ${totalTasks} completed`}
             icon={CalendarCheck}
             accent="bg-amber-50"
+            signalType="tasks"
+            explanation="Aggregated count of all tasks across Kanban boards in this workspace."
+            items={[
+              { title: "Completed Tasks", subtitle: "Successfully delivered", badge: `${completedTasksCount}`, badgeColor: "bg-green-100 text-green-700" },
+              { title: "Open / In-Progress Tasks", subtitle: "Actively being worked on", badge: `${totalTasks - completedTasksCount}`, badgeColor: "bg-blue-100 text-blue-700" },
+            ]}
           />
           <KPICard
             title="Blocked Signals"
@@ -178,6 +216,9 @@ export default function DashboardPage() {
             trendLabel={totalBlockedTasks > 0 ? "Needs PM review" : "All clear"}
             icon={DollarSign}
             accent="bg-green-50"
+            signalType="blocked"
+            explanation="A 'Blocked Signal' indicates tasks that are marked as blocked (e.g. dependencies, missing assets, approvals) or marked CRITICAL. This alerts the Project Manager to remove obstacles immediately."
+            items={blockedTasksList}
           />
         </div>
 
