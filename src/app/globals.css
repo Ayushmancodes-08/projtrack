@@ -154,4 +154,15 @@
   .scrollbar-clean::-webkit-scrollbar-thumb:hover {
     background: rgba(156, 163, 175, 0.6);
   }
+
+  /* Mobile Touch & Native Optimizations */
+  .touch-scroll {
+    -webkit-overflow-scrolling: touch;
+  }
+  .tap-highlight-none {
+    -webkit-tap-highlight-color: transparent;
+  }
+  .safe-pb {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
 }

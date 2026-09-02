@@ -238,13 +238,13 @@ export default function NewProjectPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Project template</Label>
                     <Input value={template.label} disabled className="bg-gray-50 text-slate-500 font-medium" />
                   </div>
                   <div className="space-y-2">
-                    {/* BUG-026 FIXED: Real date input for deadline */}
+                    {/* Real date input for deadline */}
                     <Label>Deadline</Label>
                     <Input
                       type="date"

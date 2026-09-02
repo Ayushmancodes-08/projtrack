@@ -132,14 +132,14 @@ function ProjectsPageContent() {
           </Card>
         ) : (
           <>
-            {/* BUG-006 FIXED: Search input with value and onChange */}
-            <div className="relative w-72">
+            {/* Search input with responsive full width on mobile */}
+            <div className="relative w-full sm:w-72">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search projects..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="h-9 rounded-lg border-gray-200 bg-white pl-9 text-xs shadow-card"
+                className="h-9 rounded-xl border-gray-200 bg-white pl-9 text-xs shadow-card"
               />
             </div>
 

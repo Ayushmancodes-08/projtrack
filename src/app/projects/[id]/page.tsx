@@ -542,25 +542,25 @@ export default function ProjectDetailPage() {
                 {template.label}
               </Badge>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5"><DollarSign className="h-3.5 w-3.5" />Workspace Project</span>
-              <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />Due {project.deadline}</span>
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 sm:gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5"><DollarSign className="h-3.5 w-3.5 shrink-0" />Workspace Project</span>
+              <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5 shrink-0" />Due {project.deadline}</span>
               <button
                 onClick={() => setIsMembersOpen(true)}
                 className="flex items-center gap-1.5 hover:text-gold-dark font-medium transition-colors cursor-pointer"
               >
-                <Users className="h-3.5 w-3.5" />
+                <Users className="h-3.5 w-3.5 shrink-0" />
                 {projectMembers.length + 1} project members
               </button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 pt-1 sm:pt-0">
             {!user?.isTeamMember && (
               <>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 border-gray-200 text-xs cursor-pointer"
+                  className="h-8 rounded-lg border-gray-200 text-xs cursor-pointer"
                   onClick={() => {
                     setConfigName(project.name)
                     setConfigDescription(project.description || "")
@@ -576,7 +576,7 @@ export default function ProjectDetailPage() {
                   <Button
                     variant="destructive"
                     size="sm"
-                    className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white flex items-center gap-1.5 border-0 cursor-pointer"
+                    className="h-8 rounded-lg text-xs bg-red-600 hover:bg-red-700 text-white flex items-center gap-1.5 border-0 cursor-pointer"
                     onClick={() => setIsDeleteOpen(true)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -586,7 +586,7 @@ export default function ProjectDetailPage() {
                 <Button 
                   size="sm" 
                   onClick={() => { setDefaultStatus("todo"); setIsTaskOpen(true) }}
-                  className="h-8 bg-gradient-to-r from-gold to-gold-dark text-navy text-xs font-semibold shadow-sm cursor-pointer hover:brightness-105 border-0"
+                  className="h-8 rounded-lg bg-gradient-to-r from-gold to-gold-dark text-white text-xs font-semibold shadow-sm cursor-pointer hover:brightness-105 border-0"
                 >
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
                   Add Task
@@ -597,8 +597,8 @@ export default function ProjectDetailPage() {
         </div>
 
         {/* Project Completion Score Bar */}
-        <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm flex flex-col gap-3 flex-shrink-0">
-          <div className="flex items-center justify-between">
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-3.5 sm:p-4 shadow-sm flex flex-col gap-3 flex-shrink-0">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="space-y-0.5">
               <span className="text-xs font-semibold text-navy/70">Project Completion Status</span>
               <div className="flex items-center gap-2">
@@ -635,10 +635,10 @@ export default function ProjectDetailPage() {
                           toast.error("Failed to mark project as completed")
                         }
                       }}
-                      className="bg-green-600 hover:bg-green-700 text-white text-xs font-semibold shadow-sm border-0 cursor-pointer h-9 px-4 rounded-lg flex items-center gap-1.5"
+                      className="bg-green-600 hover:bg-green-700 text-white text-xs font-semibold shadow-sm border-0 cursor-pointer h-8 px-3 rounded-lg flex items-center gap-1.5"
                     >
-                      <Check className="h-4 w-4" />
-                      Mark Project as Completed
+                      <Check className="h-3.5 w-3.5" />
+                      Mark Project Completed
                     </Button>
                   )
                 )}
@@ -658,7 +658,8 @@ export default function ProjectDetailPage() {
           </div>
         </div>
 
-        <div className="inline-flex items-center rounded-lg bg-gray-100/80 p-1 shadow-sm flex-shrink-0 w-fit">
+        {/* View Switcher Tabs (Kanban / Gantt / Spreadsheet) */}
+        <div className="inline-flex items-center rounded-xl bg-gray-100/80 p-1 shadow-2xs flex-shrink-0 w-full sm:w-fit overflow-x-auto">
           {(["kanban", "gantt", "spreadsheet"] as const).map((v) => {
             const Icon = viewIcons[v]
             return (
@@ -666,13 +667,13 @@ export default function ProjectDetailPage() {
                 key={v}
                 onClick={() => setView(v)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-xs font-medium transition-all duration-150",
+                  "flex-1 sm:flex-none inline-flex justify-center items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all duration-150 cursor-pointer",
                   view === v
                     ? "bg-white text-navy shadow-sm"
-                    : "text-muted-foreground/70 hover:text-navy/80"
+                    : "text-muted-foreground/80 hover:text-navy"
                 )}
               >
-                <Icon className="h-3.5 w-3.5" />
+                <Icon className="h-3.5 w-3.5 shrink-0" />
                 {v.charAt(0).toUpperCase() + v.slice(1)}
               </button>
             )

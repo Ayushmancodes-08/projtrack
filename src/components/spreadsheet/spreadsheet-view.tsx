@@ -8,18 +8,16 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { PRIORITIES } from "@/lib/constants"
 import { cn } from "@/lib/utils"
-import { ArrowUpDown, Search } from "lucide-react"
+import { ArrowUpDown, Search, Calendar, User } from "lucide-react"
 import { useAppStore } from "@/store/app-store"
 
 type SpreadsheetViewProps = {
-  // BUG-007 FIXED: Accept projectId to load real tasks from store
   projectId: string
 }
 
 export function SpreadsheetView({ projectId }: SpreadsheetViewProps) {
   const { tasks: storeTasks, projects } = useAppStore()
 
-  // BUG-007 FIXED: Use actual project tasks instead of mockRows
   const projectTasks = storeTasks[projectId] || []
   const project = projects.find((p) => p.id === projectId)
 
@@ -34,7 +32,6 @@ export function SpreadsheetView({ projectId }: SpreadsheetViewProps) {
   }))
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  // BUG-028 FIXED: Search input with state
   const [searchQuery, setSearchQuery] = useState("")
 
   const toggleSelect = (id: string) => {
@@ -48,7 +45,6 @@ export function SpreadsheetView({ projectId }: SpreadsheetViewProps) {
     else setSelected(new Set(filteredRows.map((r) => r.id)))
   }
 
-  // BUG-028 FIXED: Filter rows by search query
   const filteredRows = searchQuery.trim()
     ? rows.filter((r) =>
         r.task.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -58,7 +54,7 @@ export function SpreadsheetView({ projectId }: SpreadsheetViewProps) {
 
   if (rows.length === 0) {
     return (
-      <div className="flex h-48 flex-col items-center justify-center rounded-xl border border-gray-200/80 bg-white shadow-card text-center space-y-2">
+      <div className="flex h-48 flex-col items-center justify-center rounded-2xl border border-gray-200/80 bg-white shadow-card text-center space-y-2 p-6">
         <p className="text-sm font-semibold text-navy">No tasks yet</p>
         <p className="text-xs text-muted-foreground">
           Add tasks using the &ldquo;Add Task&rdquo; button, then switch to Spreadsheet view.
@@ -68,16 +64,18 @@ export function SpreadsheetView({ projectId }: SpreadsheetViewProps) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {selected.size > 0 && (
-        <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 shadow-sm animate-in fade-in slide-in-from-top-1">
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 shadow-sm animate-in fade-in slide-in-from-top-1">
           <span className="text-xs font-semibold text-muted-foreground">{selected.size} selected</span>
-          <div className="h-4 w-px bg-border" />
-          {["Change Status", "Change Assignee", "Change Priority"].map((label) => (
-            <Button key={label} variant="ghost" size="sm" className="h-7 rounded-md text-xs font-medium text-muted-foreground hover:text-navy">
-              {label}
-            </Button>
-          ))}
+          <div className="h-4 w-px bg-border hidden sm:block" />
+          <div className="flex flex-wrap gap-1">
+            {["Change Status", "Change Assignee", "Change Priority"].map((label) => (
+              <Button key={label} variant="ghost" size="sm" className="h-7 rounded-md text-xs font-medium text-muted-foreground hover:text-navy px-2">
+                {label}
+              </Button>
+            ))}
+          </div>
           <div className="flex-1" />
           <Button variant="ghost" size="sm" className="h-7 text-xs text-gold-dark hover:text-gold" onClick={() => setSelected(new Set())}>
             Clear
@@ -85,18 +83,19 @@ export function SpreadsheetView({ projectId }: SpreadsheetViewProps) {
         </div>
       )}
 
-      {/* BUG-028 FIXED: Search with onChange and value */}
-      <div className="relative w-56 mb-3">
-        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+      {/* Search Input */}
+      <div className="relative w-full sm:w-64">
+        <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search tasks..."
+          placeholder="Search spreadsheet tasks..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-8 pl-8 text-xs rounded-lg border-gray-200"
+          className="h-9 pl-9 text-xs rounded-xl border-gray-200 bg-white"
         />
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-card">
+      {/* Desktop / Tablet Full Table View */}
+      <div className="hidden md:block overflow-x-auto rounded-2xl border border-gray-200/80 bg-white shadow-card">
         <Table>
           <TableHeader>
             <TableRow className="bg-gray-50/80">
@@ -126,17 +125,17 @@ export function SpreadsheetView({ projectId }: SpreadsheetViewProps) {
                   <TableRow
                     key={row.id}
                     className={cn(
-                      "transition-colors hover:bg-gray-50/50",
+                      "transition-colors hover:bg-gray-50/50 cursor-pointer",
                       selected.has(row.id) && "bg-gold/5"
                     )}
                   >
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <Checkbox checked={selected.has(row.id)} onCheckedChange={() => toggleSelect(row.id)} />
                     </TableCell>
-                    <TableCell className="text-xs font-medium text-navy">{row.task}</TableCell>
+                    <TableCell className="text-xs font-semibold text-navy">{row.task}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{row.assignee}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-[10px] font-semibold text-navy/60 border-navy/15 uppercase tracking-wider">
+                      <Badge variant="outline" className="text-[10px] font-semibold text-navy/70 border-navy/15 uppercase tracking-wider">
                         {row.status.replace(/_/g, " ")}
                       </Badge>
                     </TableCell>
@@ -156,6 +155,62 @@ export function SpreadsheetView({ projectId }: SpreadsheetViewProps) {
             )}
           </TableBody>
         </Table>
+      </div>
+
+      {/* Mobile Card Layout for spreadsheet entries */}
+      <div className="md:hidden space-y-3">
+        {filteredRows.length === 0 ? (
+          <div className="rounded-2xl border border-gray-200/80 bg-white p-6 text-center text-xs text-muted-foreground">
+            No tasks match &ldquo;{searchQuery}&rdquo;
+          </div>
+        ) : (
+          filteredRows.map((row) => {
+            const priority = PRIORITIES.find((p) => p.value === row.priority)
+            const isChecked = selected.has(row.id)
+            return (
+              <div
+                key={row.id}
+                onClick={() => toggleSelect(row.id)}
+                className={cn(
+                  "rounded-2xl border bg-white p-3.5 shadow-2xs space-y-2.5 transition-all cursor-pointer",
+                  isChecked ? "border-gold ring-1 ring-gold/40 bg-gold/5" : "border-slate-200/80"
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div onClick={(e) => e.stopPropagation()} className="pt-0.5">
+                      <Checkbox checked={isChecked} onCheckedChange={() => toggleSelect(row.id)} />
+                    </div>
+                    <span className="text-xs font-semibold text-navy leading-snug break-words">
+                      {row.task}
+                    </span>
+                  </div>
+                  {priority && (
+                    <Badge variant="outline" className={cn("text-[9px] font-bold shrink-0", priority.color)}>
+                      {row.priority}
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[11px] text-muted-foreground">
+                  <span className="flex items-center gap-1.5 truncate max-w-[140px]">
+                    <User className="h-3 w-3 shrink-0" />
+                    {row.assignee}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[9px] font-semibold text-navy/70 border-navy/15 uppercase">
+                      {row.status.replace(/_/g, " ")}
+                    </Badge>
+                    <span className="flex items-center gap-1 text-[10px]">
+                      <Calendar className="h-3 w-3 shrink-0" />
+                      {row.dueDate}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )
+          })
+        )}
       </div>
 
       {project && (

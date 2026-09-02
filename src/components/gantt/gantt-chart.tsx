@@ -5,7 +5,6 @@ import { AlertCircle } from "lucide-react"
 import { useAppStore } from "@/store/app-store"
 
 type GanttChartProps = {
-  // BUG-008 FIXED: Accept projectId to load real tasks from store
   projectId: string
 }
 
@@ -14,13 +13,12 @@ const dayWidth = 44
 export function GanttChart({ projectId }: GanttChartProps) {
   const { tasks: storeTasks, projects } = useAppStore()
 
-  // BUG-008 FIXED: Use actual project tasks instead of hardcoded milestones
   const projectTasks = storeTasks[projectId] || []
   const project = projects.find((p) => p.id === projectId)
 
   if (projectTasks.length === 0) {
     return (
-      <div className="flex h-48 flex-col items-center justify-center rounded-xl border border-gray-200/80 bg-white shadow-card text-center space-y-2">
+      <div className="flex h-48 flex-col items-center justify-center rounded-2xl border border-gray-200/80 bg-white shadow-card text-center space-y-2 p-6">
         <p className="text-sm font-semibold text-navy">No tasks to display</p>
         <p className="text-xs text-muted-foreground">
           Add tasks using the &ldquo;Add Task&rdquo; button to see them on the Gantt chart.
@@ -28,14 +26,6 @@ export function GanttChart({ projectId }: GanttChartProps) {
       </div>
     )
   }
-
-  // Group tasks by status to act as "phases"
-  const statusGroups = projectTasks.reduce<Record<string, typeof projectTasks>>((acc, task) => {
-    const key = task.status || "todo"
-    if (!acc[key]) acc[key] = []
-    acc[key].push(task)
-    return acc
-  }, {})
 
   // Build flat list with derived start/duration based on sort_order and creation order
   const allTaskRows = projectTasks.map((task, i) => ({
@@ -48,20 +38,20 @@ export function GanttChart({ projectId }: GanttChartProps) {
     status: task.status,
   }))
 
-  const totalDays = Math.max(20, allTaskRows.reduce((max, t) => Math.max(max, t.startDay + t.duration), 0) + 2)
+  const totalDays = Math.max(16, allTaskRows.reduce((max, t) => Math.max(max, t.startDay + t.duration), 0) + 2)
 
   return (
-    <div className="space-y-3">
-      {/* Demo notice — Gantt doesn't have real timeline data yet */}
+    <div className="space-y-3.5">
+      {/* Demo notice */}
       <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs text-blue-700 font-medium">
-        ℹ️ Gantt timeline is approximated from task order. Real start/end dates require milestone tracking (coming soon).
+        ℹ️ Gantt timeline is approximated from task priority & sequence. Swipe horizontally to view full schedule.
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-card">
-        <div className="flex">
-          <div className="w-60 shrink-0 border-r border-gray-100">
-            <div className="flex h-11 items-center border-b border-gray-100 bg-gray-50/80 px-4">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
+      <div className="overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-card">
+        <div className="flex overflow-x-auto scrollbar-clean">
+          <div className="w-44 sm:w-60 shrink-0 border-r border-gray-100 bg-white sticky left-0 z-10 shadow-[2px_0_8px_rgba(0,0,0,0.02)]">
+            <div className="flex h-11 items-center border-b border-gray-100 bg-gray-50/80 px-3 sm:px-4">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 truncate">
                 Task {project ? `— ${project.name}` : ""}
               </span>
             </div>
@@ -69,7 +59,7 @@ export function GanttChart({ projectId }: GanttChartProps) {
               <div
                 key={task.id}
                 className={cn(
-                  "flex h-10 items-center gap-2.5 border-b border-gray-50 px-4 text-xs transition-colors",
+                  "flex h-10 items-center gap-2 border-b border-gray-50 px-3 sm:px-4 text-xs transition-colors",
                   task.critical && "bg-gold/[0.05]"
                 )}
               >
@@ -78,14 +68,14 @@ export function GanttChart({ projectId }: GanttChartProps) {
                 ) : (
                   <div className="h-3.5 w-3.5 shrink-0" />
                 )}
-                <span className={cn("truncate", task.critical && "font-semibold text-gold-dark")}>
+                <span className={cn("truncate text-xs", task.critical && "font-semibold text-gold-dark")}>
                   {task.name}
                 </span>
               </div>
             ))}
           </div>
 
-          <div className="flex-1 overflow-x-auto">
+          <div className="flex-1 overflow-x-auto scrollbar-clean min-w-[300px]">
             <div className="flex h-11 border-b border-gray-100 bg-gray-50/80" style={{ width: totalDays * dayWidth }}>
               {Array.from({ length: totalDays }, (_, i) => (
                 <div
@@ -108,12 +98,12 @@ export function GanttChart({ projectId }: GanttChartProps) {
                 >
                   <div
                     className={cn(
-                      "absolute top-1/2 h-6 -translate-y-1/2 rounded-md px-2.5 text-[10px] font-semibold leading-6 text-white transition-all duration-150 hover:opacity-90 hover:scale-y-110 cursor-pointer shadow-sm",
+                      "absolute top-1/2 h-6 -translate-y-1/2 rounded-md px-2 text-[10px] font-semibold leading-6 text-white transition-all duration-150 hover:opacity-90 hover:scale-y-110 cursor-pointer shadow-sm",
                       task.critical
-                        ? "bg-gradient-to-r from-gold to-gold-dark text-navy"
+                        ? "bg-gradient-to-r from-gold to-gold-dark text-white font-bold"
                         : "bg-gradient-to-r from-navy to-navy-lighter"
                     )}
-                    style={{ left, width: Math.max(width - 4, 30) }}
+                    style={{ left, width: Math.max(width - 4, 28) }}
                     title={`${task.name} — ${task.assignee}`}
                   >
                     <span className="opacity-90 truncate block">{task.assignee}</span>
@@ -125,7 +115,7 @@ export function GanttChart({ projectId }: GanttChartProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-4 text-[10px] text-muted-foreground pt-1">
         <span className="flex items-center gap-1.5">
           <span className="h-2.5 w-4 rounded-sm bg-gradient-to-r from-gold to-gold-dark" />
           Critical path task

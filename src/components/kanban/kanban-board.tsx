@@ -212,33 +212,33 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
   return (
     <div className="space-y-5 flex flex-col h-full min-h-0">
       {/* Kanban Interactive Principles Panel / Legend */}
-      <div className="flex flex-col gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs flex-shrink-0">
-        <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white p-3.5 sm:p-4 shadow-xs flex-shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Eye className="h-4 w-4 text-navy" />
+            <Eye className="h-4 w-4 text-navy shrink-0" />
             <h3 className="text-xs font-bold uppercase tracking-wider text-navy">Kanban Framework Overlay Controls</h3>
           </div>
-          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+          <span className="text-[11px] text-muted-foreground hidden sm:flex items-center gap-1">
             <HelpCircle className="h-3 w-3 text-gold-dark" /> Click or hover to inspect framework indicators
           </span>
         </div>
         
-        <div className="flex flex-wrap items-center gap-2.5 relative">
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-clean pb-1 relative">
           <div
-            className="relative"
+            className="relative shrink-0"
             onMouseEnter={() => setHoveredOverlay("visual_signals")}
             onMouseLeave={() => setHoveredOverlay(null)}
           >
             <button
               onClick={() => setShowVisualSignals(!showVisualSignals)}
               className={cn(
-                "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer",
+                "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer whitespace-nowrap",
                 showVisualSignals 
                   ? "border-red-200 bg-red-50 text-red-700 ring-1 ring-red-300/50" 
                   : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
               )}
             >
-              <span className={cn("h-3 w-3 rounded-full border-2", showVisualSignals ? "bg-red-500 border-red-200 animate-pulse" : "bg-slate-300 border-white")} />
+              <span className={cn("h-2.5 w-2.5 rounded-full border-2", showVisualSignals ? "bg-red-500 border-red-200 animate-pulse" : "bg-slate-300 border-white")} />
               Visual signals
             </button>
             {hoveredOverlay === "visual_signals" && (
@@ -252,20 +252,20 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
           </div>
 
           <div
-            className="relative"
+            className="relative shrink-0"
             onMouseEnter={() => setHoveredOverlay("columns")}
             onMouseLeave={() => setHoveredOverlay(null)}
           >
             <button
               onClick={() => setShowColumns(!showColumns)}
               className={cn(
-                "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer",
+                "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer whitespace-nowrap",
                 showColumns 
                   ? "border-amber-200 bg-amber-50 text-amber-700" 
                   : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
               )}
             >
-              <span className={cn("h-3 w-3 rounded-full border-2", showColumns ? "bg-amber-500 border-amber-200" : "bg-slate-300 border-white")} />
+              <span className={cn("h-2.5 w-2.5 rounded-full border-2", showColumns ? "bg-amber-500 border-amber-200" : "bg-slate-300 border-white")} />
               Columns
             </button>
             {hoveredOverlay === "columns" && (
@@ -279,21 +279,21 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
           </div>
 
           <div
-            className="relative"
+            className="relative shrink-0"
             onMouseEnter={() => setHoveredOverlay("wip_limits")}
             onMouseLeave={() => setHoveredOverlay(null)}
           >
             <button
               onClick={() => setShowWipLimits(!showWipLimits)}
               className={cn(
-                "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer",
+                "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer whitespace-nowrap",
                 showWipLimits 
                   ? "border-purple-200 bg-purple-50 text-purple-700" 
                   : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
               )}
             >
-              <span className={cn("h-3 w-3 rounded-full border-2", showWipLimits ? "bg-purple-500 border-purple-200" : "bg-slate-300 border-white")} />
-              Work-in-progress limit
+              <span className={cn("h-2.5 w-2.5 rounded-full border-2", showWipLimits ? "bg-purple-500 border-purple-200" : "bg-slate-300 border-white")} />
+              WIP Limits
             </button>
             {hoveredOverlay === "wip_limits" && (
               <div className="absolute top-full left-0 mt-2 w-64 z-50 rounded-xl bg-navy p-3 text-white shadow-xl text-[11px] animate-in fade-in-0 zoom-in-95">
@@ -306,20 +306,20 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
           </div>
 
           <div
-            className="relative"
+            className="relative shrink-0"
             onMouseEnter={() => setHoveredOverlay("commitment")}
             onMouseLeave={() => setHoveredOverlay(null)}
           >
             <button
               onClick={() => setShowCommitment(!showCommitment)}
               className={cn(
-                "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer",
+                "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer whitespace-nowrap",
                 showCommitment 
                   ? "border-teal-200 bg-teal-50 text-teal-700" 
                   : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
               )}
             >
-              <span className={cn("h-3 w-3 rounded-full border-2", showCommitment ? "bg-teal-500 border-teal-200" : "bg-slate-300 border-white")} />
+              <span className={cn("h-2.5 w-2.5 rounded-full border-2", showCommitment ? "bg-teal-500 border-teal-200" : "bg-slate-300 border-white")} />
               Commitment point
             </button>
             {hoveredOverlay === "commitment" && (
@@ -333,20 +333,20 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
           </div>
 
           <div
-            className="relative"
+            className="relative shrink-0"
             onMouseEnter={() => setHoveredOverlay("delivery")}
             onMouseLeave={() => setHoveredOverlay(null)}
           >
             <button
               onClick={() => setShowDelivery(!showDelivery)}
               className={cn(
-                "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer",
+                "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer whitespace-nowrap",
                 showDelivery 
                   ? "border-green-200 bg-green-50 text-green-700" 
                   : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
               )}
             >
-              <span className={cn("h-3 w-3 rounded-full border-2", showDelivery ? "bg-green-500 border-green-200" : "bg-slate-300 border-white")} />
+              <span className={cn("h-2.5 w-2.5 rounded-full border-2", showDelivery ? "bg-green-500 border-green-200" : "bg-slate-300 border-white")} />
               Delivery point
             </button>
             {hoveredOverlay === "delivery" && (
@@ -367,7 +367,7 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
                 setTempCols(statuses)
                 setIsManageColsOpen(true)
               }}
-              className="h-8 border-gold text-gold-dark hover:bg-gold/5 text-xs font-semibold cursor-pointer ml-auto"
+              className="h-8 border-gold text-gold-dark hover:bg-gold/5 text-xs font-semibold cursor-pointer ml-auto shrink-0 whitespace-nowrap"
             >
               Manage Columns
             </Button>
@@ -375,8 +375,30 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
         </div>
       </div>
 
+      {/* Mobile Column Quick Select Indicator */}
+      <div className="flex md:hidden items-center gap-1.5 overflow-x-auto scrollbar-clean px-1 py-1">
+        <span className="text-[10px] uppercase font-bold text-muted-foreground mr-1 shrink-0">Columns:</span>
+        {statuses.map((s) => {
+          const count = (localTasks[s.id] || []).length
+          return (
+            <button
+              key={s.id}
+              onClick={() => {
+                const colEl = document.getElementById(`kanban-col-${s.id}`)
+                colEl?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" })
+              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[11px] font-medium text-navy shadow-2xs shrink-0 active:scale-95 transition-all"
+            >
+              <span className={cn("h-2 w-2 rounded-full", bgColorMap[s.color] || "bg-slate-400")} />
+              <span>{s.label}</span>
+              <span className="ml-0.5 rounded-full bg-slate-100 px-1.5 py-0.2 text-[9px] font-bold text-slate-600">{count}</span>
+            </button>
+          )
+        })}
+      </div>
+
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex gap-5 overflow-x-auto scrollbar-clean pb-8 flex-1 min-h-0 items-stretch">
+        <div className="flex gap-4 sm:gap-5 overflow-x-auto scrollbar-clean pb-8 flex-1 min-h-0 items-stretch snap-x snap-mandatory md:snap-none">
           {statuses.map((status) => {
             const isBacklog = status.id === "backlog" || status.id === "planning" || status.id === "brief" || status.id === "question" || status.id === "not_started" || status.id === "idea"
             const isPlanned = status.id === "todo"
@@ -387,9 +409,10 @@ export function KanbanBoard({ statuses, tasks, projectId, updateTaskStatus, onTa
 
             return (
               <div 
+                id={`kanban-col-${status.id}`}
                 key={status.id} 
                 className={cn(
-                  "flex w-84 min-w-[320px] max-w-[360px] h-full shrink-0 flex-col rounded-2xl border transition-all duration-300 relative shadow-sm",
+                  "flex w-[82vw] sm:w-80 md:w-84 max-w-[360px] h-full shrink-0 flex-col rounded-2xl border transition-all duration-300 relative shadow-sm snap-center md:snap-align-none",
                   showColumns 
                     ? cn("border-2", borderColorMap[status.color] || "border-slate-200") 
                     : "border-slate-100 shadow-none",
