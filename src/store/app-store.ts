@@ -438,14 +438,28 @@ export const useAppStore = create<AppState>((set, get) => ({
       // ─────────────────────────────────────────────────────────────────────────
 
       // Fetch projects - for admin/independent users
-      // Check both the resolved workspaceId, personal, and currentUser.id to guarantee match
-      const workspaceFilters = Array.from(new Set([workspaceId, currentUser?.id, "personal"])).filter(Boolean)
-      const orCondition = workspaceFilters.map(id => `workspace_id.eq.${id}`).join(",")
+      // Check both the resolved workspaceId and currentUser.id (valid UUIDs only) to guarantee match
+      const isUuid = (str: string | undefined | null): boolean => 
+        Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str))
 
-      const { data: dbProjects, error: projError } = await supabase
-        .from("projects")
-        .select("*")
-        .or(orCondition)
+      const workspaceFilters = Array.from(new Set([workspaceId, currentUser?.id])).filter(isUuid)
+      
+      let dbProjects: any[] = []
+      let projError: any = null
+
+      if (workspaceFilters.length > 0) {
+        const orCondition = workspaceFilters.map(id => `workspace_id.eq.${id}`).join(",")
+        const res = await supabase
+          .from("projects")
+          .select("*")
+          .or(orCondition)
+        dbProjects = res.data || []
+        projError = res.error
+      } else {
+        const res = await supabase.from("projects").select("*")
+        dbProjects = res.data || []
+        projError = res.error
+      }
       
       if (!projError && dbProjects) {
         // Map DB projects to frontend Projects structure

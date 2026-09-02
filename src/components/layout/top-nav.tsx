@@ -133,9 +133,14 @@ export function TopNav() {
       {/* Workspace Switcher / Badge */}
       <button
         onClick={() => router.push("/settings")}
-        className="flex items-center gap-1.5 rounded-lg px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-navy/80 transition-colors hover:bg-navy-100 max-w-[150px] sm:max-w-none truncate cursor-pointer"
+        className="flex items-center gap-1.5 rounded-lg px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-navy/80 transition-colors hover:bg-navy-100 max-w-[200px] sm:max-w-none truncate cursor-pointer"
       >
-        <span className="truncate">{user?.isTeamMember ? "Team Workspace" : "Personal Workspace"}</span>
+        <span className="truncate">
+          {user?.isTeamMember 
+            ? "Team Workspace" 
+            : (typeof window !== "undefined" && user?.organizationId && localStorage.getItem(`projtrack_org_name_${user.organizationId}`)) 
+              || "Ayushman's Hub"}
+        </span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       </button>
 
