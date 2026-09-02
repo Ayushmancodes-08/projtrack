@@ -438,10 +438,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       // ─────────────────────────────────────────────────────────────────────────
 
       // Fetch projects - for admin/independent users
+      // Check both the resolved workspaceId, personal, and currentUser.id to guarantee match
+      const workspaceFilters = Array.from(new Set([workspaceId, currentUser?.id, "personal"])).filter(Boolean)
+      const orCondition = workspaceFilters.map(id => `workspace_id.eq.${id}`).join(",")
+
       const { data: dbProjects, error: projError } = await supabase
         .from("projects")
         .select("*")
-        .or(`workspace_id.eq.${workspaceId},workspace_id.eq.personal`)
+        .or(orCondition)
       
       if (!projError && dbProjects) {
         // Map DB projects to frontend Projects structure

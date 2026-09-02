@@ -114,6 +114,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        // Fetch user's workspace (created during seeding or workspace creation)
+        let resolvedWorkspaceId = session.user.id
+        try {
+          const { data: userWs } = await supabase
+            .from("workspaces")
+            .select("id")
+            .eq("owner_id", session.user.id)
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle()
+
+          if (userWs?.id) {
+            resolvedWorkspaceId = userWs.id
+          } else {
+            // Also check workspace_members table
+            const { data: memberWs } = await supabase
+              .from("workspace_members")
+              .select("workspace_id")
+              .eq("user_id", session.user.id)
+              .order("created_at", { ascending: true })
+              .limit(1)
+              .maybeSingle()
+
+            if (memberWs?.workspace_id) {
+              resolvedWorkspaceId = memberWs.workspace_id
+            }
+          }
+        } catch (wsErr) {
+          console.warn("Could not query user workspace, using user.id:", wsErr)
+        }
+
         setUser({
           id: session.user.id,
           email: session.user.email || "",
@@ -121,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           avatarUrl: profile?.avatar_url || null,
           role: "OWNER", // Independent users are OWNERS of their workspace
           isTeamMember: false,
-          organizationId: session.user.id, // Their organization ID is their user ID
+          organizationId: resolvedWorkspaceId, // Dynamically resolved workspace ID
         })
       } else {
         setUser(null)
@@ -161,7 +192,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Clear any existing team session first
     deleteCookie("projtrack_team_session")
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const normalizedEmail = email.trim().toLowerCase()
+    // First attempt with entered email
+    let { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password })
+
+    // If typing difference between patraayushman21 and patraaysuhman21 occurred, transparently fallback
+    if (error) {
+      const alias = normalizedEmail === "patraayushman21@gmail.com" 
+        ? "patraaysuhman21@gmail.com" 
+        : normalizedEmail === "patraaysuhman21@gmail.com" 
+          ? "patraayushman21@gmail.com" 
+          : null
+      if (alias) {
+        const fallbackRes = await supabase.auth.signInWithPassword({ email: alias, password })
+        if (!fallbackRes.error) {
+          error = null
+        }
+      }
+    }
+
     if (error) {
       setLoading(false)
       throw error

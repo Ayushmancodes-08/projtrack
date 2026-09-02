@@ -66,22 +66,41 @@ export default function SettingsPage() {
     if (!user) return
     setIsLoadingData(true)
     try {
-      // 1. Fetch Invitations
+      // 0. Fetch actual Workspace name from DB if available
+      try {
+        const { data: wsRow } = await supabase
+          .from("workspaces")
+          .select("name")
+          .eq("id", user.organizationId)
+          .maybeSingle()
+
+        if (wsRow?.name) {
+          setOrgName(wsRow.name)
+        } else {
+          const cachedName = localStorage.getItem(`projtrack_org_name_${user.organizationId}`)
+          if (cachedName) setOrgName(cachedName)
+        }
+      } catch (wsErr) {
+        console.warn("Failed to fetch workspace name", wsErr)
+      }
+
+      // 1. Fetch Invitations (check both organizationId and user.id if different)
+      const orgIds = Array.from(new Set([user.organizationId, user.id])).filter(Boolean)
       const { data: invitesData, error: invitesError } = await supabase
         .from("team_invitations")
         .select("*")
-        .eq("organization_id", user.organizationId)
+        .in("organization_id", orgIds)
         .order("created_at", { ascending: false })
 
       if (!invitesError && invitesData) {
         setInvitations(invitesData)
       }
 
-      // 2. Fetch Workspace Members (or fallback to showing just the Admin)
+      // 2. Fetch Workspace Members
       const { data: membersData, error: membersError } = await supabase
         .from("workspace_members")
         .select("*")
-        .eq("workspace_id", user.organizationId)
+        .in("workspace_id", orgIds)
 
       if (!membersError && membersData) {
         setMembers(membersData)
