@@ -29,12 +29,17 @@ export function ProjectHealthCard({
   memberCount,
   memberAvatars = [],
 }: ProjectHealthCardProps) {
-  const health = HEALTH_STATUSES.find((h) => h.value === healthStatus)!
+  const health = HEALTH_STATUSES.find((h) => h.value === healthStatus) || {
+    value: "ON_TRACK" as const,
+    label: "On Track",
+    color: "bg-green-100 text-green-700 border-green-200"
+  }
 
   const progressColor =
     healthStatus === "ON_TRACK" ? "bg-green-500"
     : healthStatus === "AT_RISK" ? "bg-gold"
-    : "bg-gold-dark"
+    : healthStatus === "CRITICAL" ? "bg-red-500"
+    : "bg-green-500"
 
   return (
     <Link href={`/projects/${id}`}>

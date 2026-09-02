@@ -432,25 +432,31 @@ export default function SettingsPage() {
               </div>
 
               {/* Joined Members */}
-              {members.map((m) => (
-                <div key={m.id} className="group flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3 transition-all hover:border-gray-200 hover:shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-8 w-8 ring-2 ring-gray-100">
-                      <AvatarFallback className="text-[10px] font-bold text-white bg-gradient-to-br from-navy to-navy-lighter">
-                        {m.email.slice(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="text-sm font-semibold text-navy">{m.email.split("@")[0]}</p>
-                      <p className="text-xs text-muted-foreground">{m.email}</p>
+              {members.map((m) => {
+                const memberEmail = m.email || "member@workspace.local"
+                const initials = memberEmail.slice(0, 2).toUpperCase()
+                const displayName = m.email ? m.email.split("@")[0] : (m.custom_title || "Team Member")
+
+                return (
+                  <div key={m.id} className="group flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3 transition-all hover:border-gray-200 hover:shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-8 w-8 ring-2 ring-gray-100">
+                        <AvatarFallback className="text-[10px] font-bold text-white bg-gradient-to-br from-navy to-navy-lighter">
+                          {initials}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="text-sm font-semibold text-navy">{displayName}</p>
+                        <p className="text-xs text-muted-foreground">{m.email || "No email listed"}</p>
+                      </div>
                     </div>
+                    <Badge variant="outline" className="text-[10px] font-semibold tracking-wide px-2.5 py-0.5 capitalize text-navy/60 border-navy/15">
+                      <Shield className="mr-1 h-2.5 w-2.5" />
+                      {m.custom_title || m.role}
+                    </Badge>
                   </div>
-                  <Badge variant="outline" className="text-[10px] font-semibold tracking-wide px-2.5 py-0.5 capitalize text-navy/60 border-navy/15">
-                    <Shield className="mr-1 h-2.5 w-2.5" />
-                    {m.custom_title || m.role}
-                  </Badge>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             {/* Invitations List */}

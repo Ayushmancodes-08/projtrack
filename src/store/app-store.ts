@@ -356,18 +356,31 @@ export const useAppStore = create<AppState>((set, get) => ({
                     : (p.status_config as StatusConfig[])
                 } catch { /* ignore */ }
               }
+              const validHealthStatuses = ["ON_TRACK", "AT_RISK", "CRITICAL"]
+              const validProjectTypes = ["SOFTWARE", "CONSTRUCTION", "EVENT", "MARKETING", "RESEARCH"]
+              
+              const rawHealth = String(p.color || "").toUpperCase()
+              const sanitizedHealth: HealthStatus = validHealthStatuses.includes(rawHealth) 
+                ? (rawHealth as HealthStatus) 
+                : "ON_TRACK"
+
+              const rawType = String(p.status || "").toUpperCase()
+              const sanitizedType: ProjectType = validProjectTypes.includes(rawType)
+                ? (rawType as ProjectType)
+                : "SOFTWARE"
+
               return {
                 id: p.id as string,
                 portfolio_id: null,
                 organization_id: (p.workspace_id as string) || "personal",
                 name: p.name as string,
                 description: (p.description as string) || "",
-                project_type: (p.status as ProjectType) || "SOFTWARE",
+                project_type: sanitizedType,
                 budget: null,
                 deadline: (p.deadline as string) || null,
                 client_name: null,
                 location: null,
-                health_status: (p.color as HealthStatus) || "ON_TRACK",
+                health_status: sanitizedHealth,
                 is_completed: p.status === "COMPLETED",
                 custom_fields: null,
                 status_config: dbStatuses,
@@ -478,18 +491,31 @@ export const useAppStore = create<AppState>((set, get) => ({
             }
           }
 
+          const validHealthStatuses = ["ON_TRACK", "AT_RISK", "CRITICAL"]
+          const validProjectTypes = ["SOFTWARE", "CONSTRUCTION", "EVENT", "MARKETING", "RESEARCH"]
+          
+          const rawHealth = String(p.color || "").toUpperCase()
+          const sanitizedHealth: HealthStatus = validHealthStatuses.includes(rawHealth) 
+            ? (rawHealth as HealthStatus) 
+            : "ON_TRACK"
+
+          const rawType = String(p.status || "").toUpperCase()
+          const sanitizedType: ProjectType = validProjectTypes.includes(rawType)
+            ? (rawType as ProjectType)
+            : (matchedLocal?.project_type || "SOFTWARE")
+
           return {
             id: p.id as string,
             portfolio_id: null,
             organization_id: (p.workspace_id as string) || "personal",
             name: p.name as string,
             description: (p.description as string) || matchedLocal?.description || "",
-            project_type: (p.status as ProjectType) || matchedLocal?.project_type || "SOFTWARE",
+            project_type: sanitizedType,
             budget: null,
             deadline: (p.deadline as string) || matchedLocal?.deadline || null,
             client_name: null,
             location: null,
-            health_status: (p.color as HealthStatus) || "ON_TRACK",
+            health_status: sanitizedHealth,
             is_completed: p.status === "COMPLETED",
             custom_fields: null,
             status_config: dbStatuses.length > 0 ? dbStatuses : (matchedLocal?.status_config || []),
