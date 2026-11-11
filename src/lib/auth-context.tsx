@@ -21,9 +21,11 @@ type AuthContextType = {
   user: AuthUser | null
   loading: boolean
   isLoaded: boolean
-  loginAsIndependent: (email: string, password: string) => Promise<void>
-  signUpAsIndependent: (email: string, password: string, fullName: string) => Promise<void>
-  loginAsTeamMember: (email: string, code: string) => Promise<void>
+  loginAsIndependent: (email: string, password: string, redirectTo?: string) => Promise<void>
+  signUpAsIndependent: (email: string, password: string, fullName: string, redirectTo?: string) => Promise<void>
+  loginAsTeamMember: (email: string, code: string, redirectTo?: string) => Promise<void>
+  resetPassword: (email: string) => Promise<void>
+  updatePassword: (password: string) => Promise<void>
   signOut: () => Promise<void>
   refreshSession: () => Promise<void>
 }
@@ -38,14 +40,30 @@ function setCookie(name: string, value: string, days = 7) {
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null
-  const matches = document.cookie.match(new RegExp(
-    "(?:^|; )" + name.replace(/([\.$?*|{}\(\)\[\]\\\/\+^])/g, '\\$1') + "=([^;]*)"
-  ))
+  const matches = document.cookie.match(
+    new RegExp(
+      "(?:^|; )" + name.replace(/([\.$?*|{}\(\)\[\]\\\/\+^])/g, "\\$1") + "=([^;]*)"
+    )
+  )
   return matches ? decodeURIComponent(matches[1]) : null
 }
 
 function deleteCookie(name: string) {
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax`
+}
+
+function resolveRedirectTarget(explicit?: string): string {
+  if (explicit && explicit.startsWith("/") && !explicit.startsWith("//")) {
+    return explicit
+  }
+  if (typeof window !== "undefined") {
+    const params = new URLSearchParams(window.location.search)
+    const urlRedirect = params.get("redirectTo")
+    if (urlRedirect && urlRedirect.startsWith("/") && !urlRedirect.startsWith("//")) {
+      return urlRedirect
+    }
+  }
+  return "/dashboard"
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -76,51 +94,82 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsLoaded(true)
           return
         } catch (e) {
-          console.error("Failed to parse team session cookie", e)
+          console.warn("Failed to parse team session cookie", e)
           deleteCookie("projtrack_team_session")
         }
       }
 
       // 2. Check Supabase Auth Session for Independent User
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) {
+      // First inspect local session storage to avoid unnecessary/failed network calls when unauthenticated
+      let authUser: any = null
+      try {
+        const { data: sessionRes, error: sessionErr } = await supabase.auth.getSession()
+        if (!sessionErr && sessionRes?.session?.user) {
+          authUser = sessionRes.session.user
+          // Optionally verify with server in the background
+          try {
+            const userRes = await supabase.auth.getUser()
+            if (userRes?.data?.user) {
+              authUser = userRes.data.user
+            }
+          } catch {
+            // Keep local session user if remote fetch times out or fails
+          }
+        }
+      } catch (authFetchErr) {
+        console.warn("Could not retrieve Supabase auth session:", authFetchErr)
+        authUser = null
+      }
+
+      if (authUser) {
         // Fetch profile
-        let { data: profile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", session.user.id)
-          .maybeSingle()
+        let profile = null
+        try {
+          const { data, error } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", authUser.id)
+            .maybeSingle()
+          if (!error && data) {
+            profile = data
+          }
+        } catch (profErr) {
+          console.warn("Could not fetch user profile:", profErr)
+        }
 
         // Auto-provision profile if it doesn't exist
         if (!profile) {
           try {
-            const fullName = session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "Independent User"
+            const fullName =
+              authUser.user_metadata?.full_name ||
+              authUser.email?.split("@")[0] ||
+              "Independent User"
             const { data: newProfile, error: insertError } = await supabase
               .from("profiles")
               .upsert({
-                id: session.user.id,
-                email: session.user.email || "",
+                id: authUser.id,
+                email: authUser.email || "",
                 full_name: fullName,
                 created_at: new Date().toISOString(),
               })
               .select()
               .maybeSingle()
-            
+
             if (!insertError && newProfile) {
               profile = newProfile
             }
           } catch (insertErr) {
-            console.error("Failed to automatically create profile:", insertErr)
+            console.warn("Failed to automatically create profile:", insertErr)
           }
         }
 
-        // Fetch user's workspace (created during seeding or workspace creation)
-        let resolvedWorkspaceId = session.user.id
+        // Fetch user's workspace
+        let resolvedWorkspaceId = authUser.id
         try {
           const { data: userWs } = await supabase
             .from("workspaces")
             .select("id")
-            .eq("owner_id", session.user.id)
+            .eq("owner_id", authUser.id)
             .order("created_at", { ascending: true })
             .limit(1)
             .maybeSingle()
@@ -128,11 +177,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (userWs?.id) {
             resolvedWorkspaceId = userWs.id
           } else {
-            // Also check workspace_members table
             const { data: memberWs } = await supabase
               .from("workspace_members")
               .select("workspace_id")
-              .eq("user_id", session.user.id)
+              .eq("user_id", authUser.id)
               .order("created_at", { ascending: true })
               .limit(1)
               .maybeSingle()
@@ -146,19 +194,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         setUser({
-          id: session.user.id,
-          email: session.user.email || "",
-          fullName: profile?.full_name || session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "Independent User",
+          id: authUser.id,
+          email: authUser.email || "",
+          fullName:
+            profile?.full_name ||
+            authUser.user_metadata?.full_name ||
+            authUser.email?.split("@")[0] ||
+            "Independent User",
           avatarUrl: profile?.avatar_url || null,
-          role: "OWNER", // Independent users are OWNERS of their workspace
+          role: "OWNER",
           isTeamMember: false,
-          organizationId: resolvedWorkspaceId, // Dynamically resolved workspace ID
+          organizationId: resolvedWorkspaceId,
         })
       } else {
         setUser(null)
       }
     } catch (error) {
-      console.error("Error checking auth session:", error)
+      console.warn("Error checking auth session:", error)
       setUser(null)
     } finally {
       setLoading(false)
@@ -170,11 +222,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkSession()
 
     // Listen for Supabase auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "SIGNED_OUT") {
         setUser(null)
       } else if (session?.user) {
-        // Only trigger checkSession if not currently logged in as a team member
         const teamSessionStr = getCookie("projtrack_team_session")
         if (!teamSessionStr) {
           await checkSession()
@@ -187,49 +240,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const loginAsIndependent = async (email: string, password: string) => {
+  const loginAsIndependent = async (
+    email: string,
+    password: string,
+    redirectTo?: string
+  ) => {
     setLoading(true)
-    // Clear any existing team session first
     deleteCookie("projtrack_team_session")
 
     const normalizedEmail = email.trim().toLowerCase()
-    // First attempt with entered email
-    let { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password })
-
-    // If typing difference between patraayushman21 and patraaysuhman21 occurred, transparently fallback
-    if (error) {
-      const alias = normalizedEmail === "patraayushman21@gmail.com" 
-        ? "patraaysuhman21@gmail.com" 
-        : normalizedEmail === "patraaysuhman21@gmail.com" 
-          ? "patraayushman21@gmail.com" 
-          : null
-      if (alias) {
-        const fallbackRes = await supabase.auth.signInWithPassword({ email: alias, password })
-        if (!fallbackRes.error) {
-          error = null
-        }
-      }
-    }
+    let { error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    })
 
     if (error) {
       setLoading(false)
       throw error
     }
+
     await checkSession()
-    window.location.href = "/dashboard"
+    window.location.href = resolveRedirectTarget(redirectTo)
   }
 
-  const signUpAsIndependent = async (email: string, password: string, fullName: string) => {
+  const signUpAsIndependent = async (
+    email: string,
+    password: string,
+    fullName: string,
+    redirectTo?: string
+  ) => {
     setLoading(true)
     deleteCookie("projtrack_team_session")
 
+    const emailRedirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(
+            resolveRedirectTarget(redirectTo)
+          )}`
+        : undefined
+
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: email.trim().toLowerCase(),
       password,
       options: {
         data: {
-          full_name: fullName,
+          full_name: fullName.trim(),
         },
+        emailRedirectTo,
       },
     })
 
@@ -239,28 +296,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (data.user) {
-      // Create profile in profiles table
-      await supabase.from("profiles").upsert({
-        id: data.user.id,
-        email: email,
-        full_name: fullName,
-        created_at: new Date().toISOString(),
-      })
+      try {
+        await supabase.from("profiles").upsert({
+          id: data.user.id,
+          email: email.trim().toLowerCase(),
+          full_name: fullName.trim(),
+          created_at: new Date().toISOString(),
+        })
+      } catch (upsertErr) {
+        console.warn("Could not upsert profile after signup:", upsertErr)
+      }
     }
 
     await checkSession()
-    window.location.href = "/dashboard"
+    window.location.href = resolveRedirectTarget(redirectTo)
   }
 
-  const loginAsTeamMember = async (email: string, code: string) => {
+  const loginAsTeamMember = async (
+    email: string,
+    code: string,
+    redirectTo?: string
+  ) => {
     setLoading(true)
-    
-    // Check team_invitations table for matching email and code
+
+    const normalizedEmail = email.trim().toLowerCase()
+    const trimmedCode = code.trim()
+
     const { data: invitation, error } = await supabase
       .from("team_invitations")
       .select("*")
-      .eq("email", email.trim().toLowerCase())
-      .eq("code", code.trim())
+      .eq("email", normalizedEmail)
+      .eq("code", trimmedCode)
       .single()
 
     if (error || !invitation) {
@@ -268,50 +334,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Invalid email or invitation code. Please check and try again.")
     }
 
-    // Sign out of Supabase Auth if currently signed in
-    await supabase.auth.signOut()
+    try {
+      await supabase.auth.signOut()
+    } catch {
+      // Ignore signOut errors if not signed in
+    }
 
-    // Ensure they are recorded in the workspace_members table (idempotent)
     try {
       const { data: existingMember } = await supabase
         .from("workspace_members")
         .select("id")
         .eq("workspace_id", invitation.organization_id)
-        .eq("email", invitation.email.trim().toLowerCase())
+        .eq("email", normalizedEmail)
         .maybeSingle()
 
       if (!existingMember) {
-        // First login: create workspace member row
         await supabase.from("workspace_members").insert({
           workspace_id: invitation.organization_id,
-          email: invitation.email.trim().toLowerCase(),
+          email: normalizedEmail,
           role: invitation.role,
           custom_title: invitation.custom_title,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
         })
 
-        // Mark the invitation as accepted only on the first successful login
         await supabase
           .from("team_invitations")
           .update({ accepted: true })
           .eq("id", invitation.id)
       }
-      // If existingMember exists, this is a re-login — code is already static & valid, no DB changes needed
     } catch (dbErr) {
       console.warn("Failed to check/insert workspace member in database:", dbErr)
     }
 
-    // Store team member session in cookie
     const sessionData = {
       email: invitation.email,
       role: invitation.role,
       organizationId: invitation.organization_id,
       code: invitation.code,
     }
-    
+
     setCookie("projtrack_team_session", JSON.stringify(sessionData), 7)
-    
-    // Set user state
+
     setUser({
       id: `team-${invitation.email}-${invitation.organization_id}`,
       email: invitation.email,
@@ -322,17 +385,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       organizationId: invitation.organization_id,
       inviteCode: invitation.code,
     })
-    
+
     setLoading(false)
     setIsLoaded(true)
     toast.success("Successfully logged in as Team Member!")
-    window.location.href = "/dashboard"
+    window.location.href = resolveRedirectTarget(redirectTo)
+  }
+
+  const resetPassword = async (email: string) => {
+    const origin =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : ""
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      email.trim().toLowerCase(),
+      {
+        redirectTo: `${origin}/auth/callback?next=/reset-password`,
+      }
+    )
+    if (error) throw error
+  }
+
+  const updatePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    })
+    if (error) throw error
   }
 
   const signOut = async () => {
     setLoading(true)
     deleteCookie("projtrack_team_session")
-    await supabase.auth.signOut()
+    try {
+      await supabase.auth.signOut()
+    } catch {
+      // Ignore signout error if session was already expired
+    }
     setUser(null)
     setLoading(false)
     window.location.href = "/login"
@@ -351,6 +439,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loginAsIndependent,
         signUpAsIndependent,
         loginAsTeamMember,
+        resetPassword,
+        updatePassword,
         signOut,
         refreshSession,
       }}

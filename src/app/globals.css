@@ -9,6 +9,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-heading: var(--font-sans);
+  --font-display: var(--font-display);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -38,15 +39,20 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --color-gold: #AE2828; /* NALCO Upsdell Red */
-  --color-gold-light: #F6EBEB;
-  --color-gold-dark: #8B1E1E;
-  --color-navy: #1E1917; /* NALCO Eerie Black / Charcoal */
-  --color-navy-light: #2E2724;
-  --color-navy-lighter: #3E3430;
-  --color-navy-100: #F3F2F1;
-  --color-navy-200: #DFDCDA;
-  --color-surface: #F8FAFC;
+  
+  /* Humanist Palette: Warm Terracotta & Amber */
+  --color-gold: #C2410C;
+  --color-gold-light: #FFEDD5;
+  --color-gold-dark: #9A3412;
+  
+  /* Humanist Palette: Warm Roasted Espresso */
+  --color-navy: #181513;
+  --color-navy-light: #25201C;
+  --color-navy-lighter: #342D28;
+  --color-navy-100: #F4EFEA;
+  --color-navy-200: #E7E0D8;
+  --color-surface: #FAF8F5;
+
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -54,38 +60,56 @@
 }
 
 :root {
-  --background: #F8FAFC; /* Aluminium Metallic Background */
-  --foreground: #1E1917;
+  /* Warm Linen & Cotton Canvas */
+  --background: #FAF8F5;
+  --foreground: #221D1A;
+  
+  /* Warm Porcelain Cards with subtle warmth */
   --card: #FFFFFF;
-  --card-foreground: #1E1917;
+  --card-foreground: #221D1A;
+  
   --popover: #FFFFFF;
-  --popover-foreground: #1E1917;
-  --primary: #1E1917;
+  --popover-foreground: #221D1A;
+  
+  /* Primary: Rich Warm Terracotta */
+  --primary: #C2410C;
   --primary-foreground: #FFFFFF;
-  --secondary: #F1F5F9;
-  --secondary-foreground: #1E1917;
-  --muted: #F1F5F9;
-  --muted-foreground: #64748B;
-  --accent: #AE2828;
-  --accent-foreground: #FFFFFF;
+  
+  /* Secondary & Muted: Warm Oat Pebble */
+  --secondary: #F3EFE9;
+  --secondary-foreground: #221D1A;
+  --muted: #F3EFE9;
+  --muted-foreground: #78716C;
+  
+  /* Accent & Destructive */
+  --accent: #FFEDD5;
+  --accent-foreground: #9A3412;
   --destructive: #B91C1C;
-  --border: #E2E8F0;
-  --input: #E2E8F0;
-  --ring: #AE2828;
-  --chart-1: #1E1917;
-  --chart-2: #AE2828;
-  --chart-3: #3E3430;
-  --chart-4: #22C55E;
-  --chart-5: #64748B;
-  --radius: 0.625rem;
-  --sidebar: #1E1917;
-  --sidebar-foreground: #FFFFFF;
-  --sidebar-primary: #AE2828;
+  
+  /* Tactile Warm Stone Borders */
+  --border: #E8E2D9;
+  --input: #E8E2D9;
+  --ring: #C2410C;
+  
+  /* Earthy Harmonious Charts */
+  --chart-1: #C2410C; /* Terracotta */
+  --chart-2: #2B6E47; /* Warm Moss Green */
+  --chart-3: #D97706; /* Spiced Amber */
+  --chart-4: #44403C; /* Warm Charcoal */
+  --chart-5: #854D0E; /* Ochre */
+  
+  /* Modern Organic Geometry */
+  --radius: 0.75rem;
+  
+  /* Sidebar: Deep Espresso with Terracotta highlights */
+  --sidebar: #181513;
+  --sidebar-foreground: #FAF8F5;
+  --sidebar-primary: #C2410C;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #2E2724;
-  --sidebar-accent-foreground: #FFFFFF;
-  --sidebar-border: #2E2724;
-  --sidebar-ring: #AE2828;
+  --sidebar-accent: #25201C;
+  --sidebar-accent-foreground: #FAF8F5;
+  --sidebar-border: #2B2521;
+  --sidebar-ring: #C2410C;
 }
 
 @layer base {
@@ -93,7 +117,8 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased selection:bg-orange-200 selection:text-orange-950;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
   html {
     @apply font-sans;
@@ -102,28 +127,28 @@
 
 @layer utilities {
   .shadow-card {
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 1px 3px 0 rgba(34, 29, 26, 0.04), 0 2px 6px -1px rgba(34, 29, 26, 0.05);
   }
   .shadow-card-hover {
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 6px 12px -2px rgba(34, 29, 26, 0.08), 0 3px 6px -2px rgba(34, 29, 26, 0.06);
   }
   .shadow-elevated {
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 12px 24px -4px rgba(34, 29, 26, 0.08), 0 4px 8px -2px rgba(34, 29, 26, 0.04);
   }
   .shadow-modal {
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 24px 38px -6px rgba(34, 29, 26, 0.14), 0 10px 14px -5px rgba(34, 29, 26, 0.08);
   }
   .text-balance {
     text-wrap: balance;
   }
   .bg-gold-fade {
-    background: linear-gradient(135deg, rgba(174, 40, 40, 0.1) 0%, rgba(174, 40, 40, 0.02) 100%);
+    background: linear-gradient(135deg, rgba(194, 65, 12, 0.1) 0%, rgba(217, 119, 6, 0.03) 100%);
   }
   .border-gold-subtle {
-    border-color: rgba(174, 40, 40, 0.2);
+    border-color: rgba(194, 65, 12, 0.2);
   }
   .text-gradient-gold {
-    background: linear-gradient(135deg, #AE2828, #8B1E1E);
+    background: linear-gradient(135deg, #C2410C, #D97706);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -134,7 +159,7 @@
     transition: scrollbar-color 0.3s;
   }
   .scrollbar-clean:hover {
-    scrollbar-color: rgba(156, 163, 175, 0.4) transparent;
+    scrollbar-color: rgba(120, 113, 108, 0.3) transparent;
   }
   .scrollbar-clean::-webkit-scrollbar {
     width: 6px;
@@ -149,10 +174,10 @@
     transition: background-color 0.3s;
   }
   .scrollbar-clean:hover::-webkit-scrollbar-thumb {
-    background: rgba(156, 163, 175, 0.4);
+    background: rgba(120, 113, 108, 0.3);
   }
   .scrollbar-clean::-webkit-scrollbar-thumb:hover {
-    background: rgba(156, 163, 175, 0.6);
+    background: rgba(120, 113, 108, 0.5);
   }
 
   /* Mobile Touch & Native Optimizations */

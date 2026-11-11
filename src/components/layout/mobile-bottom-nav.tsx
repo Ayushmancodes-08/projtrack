@@ -64,7 +64,7 @@ export function MobileBottomNav() {
   ]
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 block border-t border-gray-200/80 bg-white/95 backdrop-blur-md lg:hidden shadow-[0_-4px_16px_rgba(0,0,0,0.04)] pb-[env(safe-area-inset-bottom,0px)]">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 block border-t border-[#E8E2D9] bg-[#FAF8F5]/95 backdrop-blur-md lg:hidden shadow-[0_-4px_20px_rgba(34,29,26,0.06)] pb-[env(safe-area-inset-bottom,0px)]">
       <div className="flex h-16 items-center justify-around px-2">
         {navItems.map((item) => {
           const Icon = item.icon
@@ -75,12 +75,12 @@ export function MobileBottomNav() {
               <Link
                 key={item.href}
                 href={item.href}
-                className="group relative -top-3 flex flex-col items-center justify-center"
+                className="group relative -top-3.5 flex flex-col items-center justify-center"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-tr from-gold to-gold-dark text-white shadow-lg shadow-gold/30 ring-4 ring-white transition-transform duration-200 active:scale-95 group-hover:scale-105">
-                  <Plus className="h-6 w-6" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-600 text-white shadow-lg shadow-orange-950/30 ring-4 ring-[#FAF8F5] transition-transform duration-200 active:scale-95 group-hover:scale-105">
+                  <Plus className="h-6 w-6 stroke-[2.5]" />
                 </div>
-                <span className="mt-0.5 text-[10px] font-semibold text-navy">
+                <span className="mt-1 text-[10px] font-semibold text-stone-800">
                   New
                 </span>
               </Link>
@@ -93,13 +93,13 @@ export function MobileBottomNav() {
               href={item.href}
               className={cn(
                 "flex flex-1 flex-col items-center justify-center py-1.5 transition-all duration-150 relative",
-                isActive ? "text-gold font-semibold" : "text-slate-400 hover:text-slate-700"
+                isActive ? "text-orange-600 font-semibold" : "text-stone-400 hover:text-stone-600"
               )}
             >
               <div className="relative">
                 <Icon className={cn("h-5 w-5 transition-transform duration-150", isActive && "scale-110")} />
                 {isActive && (
-                  <span className="absolute -bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-gold" />
+                  <span className="absolute -bottom-1.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-orange-600" />
                 )}
               </div>
               <span className="mt-1 text-[10px] tracking-tight truncate max-w-[64px]">

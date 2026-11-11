@@ -122,3 +122,210 @@ CREATE INDEX IF NOT EXISTS idx_project_members_email ON project_members(email);
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_project ON activity_logs(project_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications_queue(user_id);
+
+
+-- ==========================================
+-- ROW LEVEL SECURITY (RLS) POLICIES
+-- ==========================================
+
+-- Enable RLS on all exposed tables
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workspaces ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workspace_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE team_invitations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE project_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications_queue ENABLE ROW LEVEL SECURITY;
+
+-- 1. Profiles Policies
+CREATE POLICY "Public profiles are readable by authenticated users"
+  ON profiles FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "Users can insert their own profile"
+  ON profiles FOR INSERT
+  TO authenticated
+  WITH CHECK ((select auth.uid()) = id);
+
+CREATE POLICY "Users can update their own profile"
+  ON profiles FOR UPDATE
+  TO authenticated
+  USING ((select auth.uid()) = id)
+  WITH CHECK ((select auth.uid()) = id);
+
+-- 2. Workspaces Policies
+CREATE POLICY "Workspaces viewable by members or owners"
+  ON workspaces FOR SELECT
+  TO authenticated
+  USING (
+    id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE email = (SELECT email FROM auth.users WHERE id = (select auth.uid()))
+    )
+    OR id = (select auth.uid())::text
+  );
+
+CREATE POLICY "Workspaces insertable by authenticated users"
+  ON workspaces FOR INSERT
+  TO authenticated
+  WITH CHECK (true);
+
+CREATE POLICY "Workspaces updatable by authenticated users"
+  ON workspaces FOR UPDATE
+  TO authenticated
+  USING (
+    id = (select auth.uid())::text
+    OR id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE email = (SELECT email FROM auth.users WHERE id = (select auth.uid()))
+      AND role IN ('OWNER', 'PM')
+    )
+  )
+  WITH CHECK (
+    id = (select auth.uid())::text
+    OR id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE email = (SELECT email FROM auth.users WHERE id = (select auth.uid()))
+      AND role IN ('OWNER', 'PM')
+    )
+  );
+
+-- 3. Projects Policies
+CREATE POLICY "Projects viewable by workspace or project members"
+  ON projects FOR SELECT
+  TO authenticated
+  USING (
+    workspace_id = (select auth.uid())::text
+    OR workspace_id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE email = (SELECT email FROM auth.users WHERE id = (select auth.uid()))
+    )
+    OR id IN (
+      SELECT project_id FROM project_members
+      WHERE email = (SELECT email FROM auth.users WHERE id = (select auth.uid()))
+    )
+  );
+
+CREATE POLICY "Projects insertable by authenticated users"
+  ON projects FOR INSERT
+  TO authenticated
+  WITH CHECK (true);
+
+CREATE POLICY "Projects updatable by authenticated users"
+  ON projects FOR UPDATE
+  TO authenticated
+  USING (
+    workspace_id = (select auth.uid())::text
+    OR workspace_id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE email = (SELECT email FROM auth.users WHERE id = (select auth.uid()))
+    )
+  )
+  WITH CHECK (
+    workspace_id = (select auth.uid())::text
+    OR workspace_id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE email = (SELECT email FROM auth.users WHERE id = (select auth.uid()))
+    )
+  );
+
+CREATE POLICY "Projects deletable by authenticated owners"
+  ON projects FOR DELETE
+  TO authenticated
+  USING (
+    workspace_id = (select auth.uid())::text
+    OR workspace_id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE email = (SELECT email FROM auth.users WHERE id = (select auth.uid()))
+      AND role = 'OWNER'
+    )
+  );
+
+-- 4. Tasks Policies
+CREATE POLICY "Tasks viewable by project members"
+  ON tasks FOR SELECT
+  TO authenticated
+  USING (
+    project_id IN (
+      SELECT id FROM projects
+      WHERE workspace_id = (select auth.uid())::text
+      OR workspace_id IN (
+        SELECT workspace_id FROM workspace_members
+        WHERE email = (SELECT email FROM auth.users WHERE id = (select auth.uid()))
+      )
+    )
+  );
+
+CREATE POLICY "Tasks manageable by authenticated users"
+  ON tasks FOR ALL
+  TO authenticated
+  USING (
+    project_id IN (
+      SELECT id FROM projects
+      WHERE workspace_id = (select auth.uid())::text
+      OR workspace_id IN (
+        SELECT workspace_id FROM workspace_members
+        WHERE email = (SELECT email FROM auth.users WHERE id = (select auth.uid()))
+      )
+    )
+  );
+
+-- 5. Activity Logs Policies
+CREATE POLICY "Activity logs viewable by project members"
+  ON activity_logs FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "Activity logs insertable by authenticated users"
+  ON activity_logs FOR INSERT
+  TO authenticated
+  WITH CHECK (true);
+
+-- 6. Notifications Queue Policies
+CREATE POLICY "Notifications viewable by target user"
+  ON notifications_queue FOR SELECT
+  TO authenticated
+  USING (
+    user_id = (select auth.uid())::text
+    OR user_id = (SELECT email FROM auth.users WHERE id = (select auth.uid()))
+  );
+
+CREATE POLICY "Notifications manageable by target user"
+  ON notifications_queue FOR ALL
+  TO authenticated
+  USING (
+    user_id = (select auth.uid())::text
+    OR user_id = (SELECT email FROM auth.users WHERE id = (select auth.uid()))
+  );
+
+-- ==========================================
+-- AUTOMATIC PROFILE PROVISIONING TRIGGER
+-- ==========================================
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = ''
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name, avatar_url, created_at)
+  VALUES (
+    new.id,
+    new.email,
+    COALESCE(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+    new.raw_user_meta_data->>'avatar_url',
+    NOW()
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    full_name = COALESCE(EXCLUDED.full_name, public.profiles.full_name);
+  RETURN new;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();

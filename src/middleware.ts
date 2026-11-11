@@ -1,88 +1,73 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
-import { createServerClient } from "@supabase/ssr"
+import { updateSession } from "@/lib/supabase/middleware"
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
+  const { pathname, search } = request.nextUrl
 
-  // Define public routes
+  // 1. Refresh Supabase session and get authenticated user
+  const { supabaseResponse, user } = await updateSession(request)
+
+  // 2. Check team member session cookie
+  const teamSession = request.cookies.get("projtrack_team_session")?.value
+
+  const isAuthenticated = Boolean(user || teamSession)
+
+  // 3. Define public routes
   const isPublicRoute =
     pathname === "/" ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/signup") ||
     pathname.startsWith("/forgot-password") ||
+    pathname.startsWith("/reset-password") ||
+    pathname.startsWith("/auth") ||
     pathname.startsWith("/api/public")
 
-  // Check team member session cookie
-  const teamSession = request.cookies.get("projtrack_team_session")?.value
-
-  // Check Supabase session
-  let hasSupabaseSession = false
-  let response = NextResponse.next()
-
-  try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://dummy.supabase.co"
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "dummy-anon-key"
-
-    const supabase = createServerClient(
-      supabaseUrl,
-      supabaseAnonKey,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll()
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value }) =>
-              request.cookies.set(name, value)
-            )
-            response = NextResponse.next({
-              request: {
-                headers: request.headers,
-              },
-            })
-            cookiesToSet.forEach(({ name, value, options }) =>
-              response.cookies.set(name, value, options)
-            )
-          },
-        },
-      }
-    )
-    const { data: { session } } = await supabase.auth.getSession()
-    hasSupabaseSession = !!session?.user
-  } catch (e) {
-    console.error("Error checking Supabase session in middleware", e)
-  }
-
-  const isAuthenticated = !!teamSession || hasSupabaseSession
-
+  // 4. Redirect unauthenticated users trying to access protected routes
   if (!isAuthenticated && !isPublicRoute) {
-    // Redirect to login if not authenticated and trying to access a protected route
-    const redirectUrl = new URL("/login", request.url)
-    return NextResponse.redirect(redirectUrl)
+    const redirectUrl = request.nextUrl.clone()
+    redirectUrl.pathname = "/login"
+    const target = pathname + (search || "")
+    if (target && target !== "/") {
+      redirectUrl.searchParams.set("redirectTo", target)
+    }
+
+    const redirectResponse = NextResponse.redirect(redirectUrl)
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, cookie)
+    })
+    return redirectResponse
   }
 
-  if (isAuthenticated && (pathname.startsWith("/login") || pathname.startsWith("/signup"))) {
-    // Redirect to dashboard if already authenticated and trying to access login/signup
-    const redirectUrl = new URL("/dashboard", request.url)
-    return NextResponse.redirect(redirectUrl)
+  // 5. Redirect authenticated users away from login/signup to dashboard
+  if (
+    isAuthenticated &&
+    (pathname.startsWith("/login") || pathname.startsWith("/signup"))
+  ) {
+    const redirectUrl = request.nextUrl.clone()
+    redirectUrl.pathname = "/dashboard"
+    redirectUrl.search = ""
+
+    const redirectResponse = NextResponse.redirect(redirectUrl)
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, cookie)
+    })
+    return redirectResponse
   }
 
-  return response
+  return supabaseResponse
 }
 
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
+     * Match all request paths except:
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - images/assets (svg, png, etc.)
+     * - Public static assets (.svg, .png, .jpg, etc.)
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-    // Always run for API routes
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
     "/(api|trpc)(.*)",
   ],
 }
-

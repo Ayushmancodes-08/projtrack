@@ -1,22 +1,21 @@
-
-export const NAVY = "#0A1F3D"
-export const GOLD = "#C9A24B"
-export const GOLD_DARK = "#B8922E"
-export const SURFACE = "#F7F8FA"
+export const NAVY = "#181513"
+export const GOLD = "#C2410C"
+export const GOLD_DARK = "#9A3412"
+export const SURFACE = "#FAF8F5"
 export const WHITE = "#FFFFFF"
-export const GREEN = "#22C55E"
+export const GREEN = "#15803D"
 
 export const PRIORITIES = [
-  { value: "LOW" as const, label: "Low", color: "bg-gray-100 text-gray-600" },
-  { value: "MEDIUM" as const, label: "Medium", color: "bg-blue-100 text-blue-600" },
-  { value: "HIGH" as const, label: "High", color: "bg-amber-100 text-amber-600" },
-  { value: "CRITICAL" as const, label: "Critical", color: "bg-red-100 text-red-600" },
+  { value: "LOW" as const, label: "Low", color: "bg-stone-100 text-stone-700 border-stone-200" },
+  { value: "MEDIUM" as const, label: "Medium", color: "bg-amber-50 text-amber-800 border-amber-200" },
+  { value: "HIGH" as const, label: "High", color: "bg-orange-50 text-orange-800 border-orange-200" },
+  { value: "CRITICAL" as const, label: "Critical", color: "bg-rose-50 text-rose-800 border-rose-200" },
 ]
 
 export const HEALTH_STATUSES = [
-  { value: "ON_TRACK" as const, label: "On Track", color: "bg-green-100 text-green-700 border-green-200" },
-  { value: "AT_RISK" as const, label: "At Risk", color: "bg-amber-100 text-amber-700 border-amber-200" },
-  { value: "CRITICAL" as const, label: "Critical", color: "bg-red-100 text-red-700 border-red-200" },
+  { value: "ON_TRACK" as const, label: "On Track", color: "bg-emerald-50 text-emerald-800 border-emerald-200" },
+  { value: "AT_RISK" as const, label: "At Risk", color: "bg-amber-50 text-amber-800 border-amber-200" },
+  { value: "CRITICAL" as const, label: "Critical", color: "bg-rose-50 text-rose-800 border-rose-200" },
 ]
 
 export const ROLES = [
@@ -46,14 +45,14 @@ export const SIDEBAR_ITEMS = [
 ]
 
 export const STATUS_COLORS = [
-  { value: "slate", label: "Slate", class: "bg-slate-100 text-slate-700 border-slate-200" },
-  { value: "blue", label: "Blue", class: "bg-blue-100 text-blue-700 border-blue-200" },
-  { value: "amber", label: "Amber", class: "bg-amber-100 text-amber-700 border-amber-200" },
-  { value: "green", label: "Green", class: "bg-green-100 text-green-700 border-green-200" },
-  { value: "purple", label: "Purple", class: "bg-purple-100 text-purple-700 border-purple-200" },
-  { value: "crimson", label: "Crimson", class: "bg-gold/10 text-gold-dark border-gold/20" },
-  { value: "teal", label: "Teal", class: "bg-teal-100 text-teal-700 border-teal-200" },
-  { value: "indigo", label: "Indigo", class: "bg-indigo-100 text-indigo-700 border-indigo-200" },
+  { value: "slate", label: "Warm Stone", class: "bg-stone-100 text-stone-700 border-stone-200" },
+  { value: "blue", label: "Ocean Slate", class: "bg-slate-100 text-slate-700 border-slate-200" },
+  { value: "amber", label: "Spiced Honey", class: "bg-amber-50 text-amber-800 border-amber-200" },
+  { value: "green", label: "Forest Moss", class: "bg-emerald-50 text-emerald-800 border-emerald-200" },
+  { value: "purple", label: "Mulberry", class: "bg-purple-50 text-purple-800 border-purple-200" },
+  { value: "crimson", label: "Terracotta", class: "bg-orange-50 text-orange-800 border-orange-200" },
+  { value: "teal", label: "Deep Sage", class: "bg-teal-50 text-teal-800 border-teal-200" },
+  { value: "indigo", label: "Midnight Dusk", class: "bg-stone-200 text-stone-800 border-stone-300" },
 ]
 
 export const STATUS_CATEGORIES = [
